@@ -6,10 +6,12 @@
     <style>
         body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
         #chat-box { border: 1px solid #ccc; border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; margin-bottom: 16px; }
-        .msg { margin: 8px 0; }
+        .msg { margin: 8px 0; white-space: pre-wrap; line-height: 1.5; }
         .user { text-align: right; color: #333; }
         .bot { text-align: left; color: #0066cc; }
         .label { font-weight: bold; margin-right: 4px; }
+        .top-bar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .top-bar select { flex: 1; }
         form { display: flex; gap: 8px; }
         input[type="text"] { flex: 1; padding: 8px; }
         button { padding: 8px 16px; }
@@ -17,7 +19,12 @@
 </head>
 <body>
     <h1>{{ title }}</h1>
-    <select id="model-select"></select>
+
+    <div class="top-bar">
+        <select id="model-select"></select>
+        <button id="reset-button" type="button">대화 초기화</button>
+    </div>
+
     <div id="chat-box"></div>
 
     <form id="chat-form">
@@ -26,6 +33,10 @@
     </form>
 
     <script>
+        const MAX_HISTORY = 12; // 최근 N개 메시지만 유지 (system 제외, user+assistant 합산)
+
+        let conversationHistory = [];
+
         async function loadModels() {
             const res = await fetch("/models");
             const data = await res.json();
@@ -43,6 +54,7 @@
         const input = document.getElementById("message-input");
         const chatBox = document.getElementById("chat-box");
         const submitButton = form.querySelector("button[type='submit']");
+        const resetButton = document.getElementById("reset-button");
 
         function appendMessage(text, sender) {
             const div = document.createElement("div");
@@ -60,8 +72,13 @@
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            return textSpan; // 나중에 내용만 갱신할 수 있도록 텍스트 노드 반환
+            return textSpan;
         }
+
+        resetButton.addEventListener("click", () => {
+            conversationHistory = [];
+            chatBox.innerHTML = "";
+        });
 
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -69,6 +86,13 @@
             if (!message) return;
 
             appendMessage(message, "user");
+            conversationHistory.push({ role: "user", content: message });
+
+            // 오래된 메시지는 잘라내서 CPU 부담 줄이기
+            if (conversationHistory.length > MAX_HISTORY) {
+                conversationHistory = conversationHistory.slice(-MAX_HISTORY);
+            }
+
             input.value = "";
             input.disabled = true;
             submitButton.disabled = true;
@@ -77,18 +101,22 @@
             const thinkingText = appendMessage("생각하는 중...", "bot");
             thinkingText.style.opacity = "0.5";
 
-            const formData = new FormData();
-            formData.append("message", message);
-            formData.append("model", document.getElementById("model-select").value);
-
             try {
                 const res = await fetch("/chat", {
                     method: "POST",
-                    body: formData,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: document.getElementById("model-select").value,
+                        messages: conversationHistory,
+                    }),
                 });
                 const data = await res.json();
-                thinkingText.textContent = data.reply ?? JSON.stringify(data);
+                const reply = data.reply ?? JSON.stringify(data);
+
+                thinkingText.textContent = reply;
                 thinkingText.style.opacity = "1";
+
+                conversationHistory.push({ role: "assistant", content: reply });
             } catch (err) {
                 thinkingText.textContent = "오류가 발생했습니다: " + err;
                 thinkingText.style.opacity = "1";
