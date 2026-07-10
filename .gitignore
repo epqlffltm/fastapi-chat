@@ -8,6 +8,8 @@ wheels/
 
 # Virtual environments
 .venv/
+prompts/system_prompt.txt
+config/.env
 
 # Environment & secrets
 .env
