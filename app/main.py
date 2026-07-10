@@ -2,30 +2,33 @@
 
 '''
 2026-07-09
-챗봇 서버 해본 것
-2026-07-09
-챗봇 서버 - 대화 기록(멀티턴) 반영
+챗봇 서버 - 설정값 .env, 시스템 프롬프트 txt로 분리
 '''
 
+import os
+from pathlib import Path
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+BASE_DIR = Path(__file__).resolve().parent.parent  # 프로젝트 루트
+
+load_dotenv(BASE_DIR / "config" / ".env")
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
-OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
+OLLAMA_TAGS_URL = f"{OLLAMA_HOST}/api/tags"
 
-SYSTEM_PROMPT = (
-    "당신은 친절한 도우미입니다. 반드시 한국어(한글)로만 답변하세요. "
-    "숫자, 로마자 알파벳(A-Z)은 필요한 경우에만 최소한으로 사용하세요. "
-    "한자, 히라가나, 가타카나 등 한글이 아닌 다른 나라 문자는 절대 사용하지 마세요. "
-    "목록을 나열할 때는 각 항목을 반드시 줄바꿈으로 구분하세요. "
-    "문단이 바뀔 때도 줄바꿈을 사용해 가독성 있게 작성하세요."
-)
+NUM_THREAD = int(os.getenv("NUM_THREAD", "8"))
+MAX_HISTORY = int(os.getenv("MAX_HISTORY", "14"))
 
+with open(BASE_DIR / "prompts" / "system_prompt.txt", "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT = f.read().strip()
 
 
 class ChatMessage(BaseModel):
@@ -50,7 +53,9 @@ async def get_default_model() -> str:
 
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"title": "Chat"})
+    return templates.TemplateResponse(
+        request, "index.html", {"title": "Chat", "max_history": MAX_HISTORY}
+    )
 
 
 @app.get("/models")
@@ -75,7 +80,7 @@ async def chat(payload: ChatRequest):
                 "model": model,
                 "messages": ollama_messages,
                 "stream": False,
-                "options": {"num_thread": 6},
+                "options": {"num_thread": NUM_THREAD},
             },
         )
         data = response.json()
