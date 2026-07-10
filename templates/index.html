@@ -3,131 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
-    <style>
-        const MAX_HISTORY = {{ max_history }};
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
-        #chat-box { border: 1px solid #ccc; border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; margin-bottom: 16px; }
-        .msg { margin: 8px 0; white-space: pre-wrap; line-height: 1.5; }
-        .user { text-align: right; color: #333; }
-        .bot { text-align: left; color: #0066cc; }
-        .label { font-weight: bold; margin-right: 4px; }
-        .top-bar { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-        .top-bar select { flex: 1; }
-        form { display: flex; gap: 8px; }
-        input[type="text"] { flex: 1; padding: 8px; }
-        button { padding: 8px 16px; }
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <h1>{{ title }}</h1>
+    <aside class="sidebar">
+        <div class="app-title">{{ title }}</div>
+        <button class="new-chat-btn" id="new-chat-btn" type="button">➕ 새 대화</button>
+        <div id="session-list"></div>
+    </aside>
 
-    <div class="top-bar">
-        <select id="model-select"></select>
-        <button id="reset-button" type="button">대화 초기화</button>
+    <main class="chat-panel">
+        <div class="top-bar">
+    <select id="model-select"></select>
+    <label class="think-toggle">
+        <input type="checkbox" id="think-checkbox">
+        🧠 생각 과정 보기
+    </label>
+    <div class="nickname-wrap">
+        <span id="nickname-display" class="nickname-display" title="클릭해서 별명 수정"></span>
     </div>
+    <button id="reset-button" class="icon-btn" type="button" title="이 대화 지우기">🗑️</button>
+</div>
+        <div id="chat-box"></div>
 
-    <div id="chat-box"></div>
-
-    <form id="chat-form">
-        <input type="text" id="message-input" placeholder="메시지를 입력하세요" required>
-        <button type="submit">전송</button>
-    </form>
+        <form id="chat-form">
+            <input type="text" id="message-input" placeholder="메시지를 입력하세요" required>
+            <button class="send-btn" type="submit">➤</button>
+        </form>
+    </main>
 
     <script>
-        const MAX_HISTORY = 12; // 최근 N개 메시지만 유지 (system 제외, user+assistant 합산)
-
-        let conversationHistory = [];
-
-        async function loadModels() {
-            const res = await fetch("/models");
-            const data = await res.json();
-            const select = document.getElementById("model-select");
-            data.models.forEach((name) => {
-                const opt = document.createElement("option");
-                opt.value = name;
-                opt.textContent = name;
-                select.appendChild(opt);
-            });
-        }
-        loadModels();
-
-        const form = document.getElementById("chat-form");
-        const input = document.getElementById("message-input");
-        const chatBox = document.getElementById("chat-box");
-        const submitButton = form.querySelector("button[type='submit']");
-        const resetButton = document.getElementById("reset-button");
-
-        function appendMessage(text, sender) {
-            const div = document.createElement("div");
-            div.className = `msg ${sender}`;
-
-            const label = document.createElement("span");
-            label.className = "label";
-            label.textContent = sender === "user" ? "나:" : "모델:";
-
-            const textSpan = document.createElement("span");
-            textSpan.textContent = text;
-
-            div.appendChild(label);
-            div.appendChild(textSpan);
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-
-            return textSpan;
-        }
-
-        resetButton.addEventListener("click", () => {
-            conversationHistory = [];
-            chatBox.innerHTML = "";
-        });
-
-        form.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const message = input.value.trim();
-            if (!message) return;
-
-            appendMessage(message, "user");
-            conversationHistory.push({ role: "user", content: message });
-
-            // 오래된 메시지는 잘라내서 CPU 부담 줄이기
-            if (conversationHistory.length > MAX_HISTORY) {
-                conversationHistory = conversationHistory.slice(-MAX_HISTORY);
-            }
-
-            input.value = "";
-            input.disabled = true;
-            submitButton.disabled = true;
-            submitButton.textContent = "전송 중...";
-
-            const thinkingText = appendMessage("생각하는 중...", "bot");
-            thinkingText.style.opacity = "0.5";
-
-            try {
-                const res = await fetch("/chat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        model: document.getElementById("model-select").value,
-                        messages: conversationHistory,
-                    }),
-                });
-                const data = await res.json();
-                const reply = data.reply ?? JSON.stringify(data);
-
-                thinkingText.textContent = reply;
-                thinkingText.style.opacity = "1";
-
-                conversationHistory.push({ role: "assistant", content: reply });
-            } catch (err) {
-                thinkingText.textContent = "오류가 발생했습니다: " + err;
-                thinkingText.style.opacity = "1";
-            } finally {
-                input.disabled = false;
-                submitButton.disabled = false;
-                submitButton.textContent = "전송";
-                input.focus();
-            }
-        });
+        const MAX_HISTORY = {{ max_history }};
     </script>
+    <script src="/static/js/session-store.js"></script>
+    <script src="/static/js/message-render.js"></script>
+    <script src="/static/js/chat-actions.js"></script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
