@@ -14,6 +14,7 @@ MODELS = [
     "exaone3.5:7.8b",       # LG, 한국어 특화
     "llama3.1:8b",           # 8B, 범용
     "phi4-mini"              # 3.8B, 추론 특화
+
 ]
 
 
