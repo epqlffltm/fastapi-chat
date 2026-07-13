@@ -3,7 +3,7 @@
 '''
 2026-07-11
 챗봇 서버 - Pydantic 스키마 정의
-'''
+
 
 from pydantic import BaseModel
 
@@ -17,3 +17,6 @@ class ChatRequest(BaseModel):
     model: str | None = None
     messages: list[ChatMessage]
     think: bool = False
+'''
+
+#schemas/ 생성으로 죽은 파일
