@@ -6,6 +6,7 @@ GET /models, POST /chat
 
 2026-07-11
 챗봇 서버 - Pydantic 스키마 정의(app/schemas.py)로 이동
+스키마 정의 제거, import로 교체
 '''
 
 import json
@@ -13,21 +14,14 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.config import OLLAMA_TAGS_URL, SYSTEM_PROMPT, MAX_HISTORY
 from app.database.database import get_db
 from app.database.models import ChatSession, ChatMessage
 from app.ollama_client import get_default_model, ollama_stream
+from app.schemas import ChatRequest
 
 router = APIRouter()
-
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str | None = None
-    model: str | None = None
-    think: bool = False
-    regenerate: bool = False
 
 @router.get("/models")
 async def list_models():
@@ -44,7 +38,6 @@ async def chat(payload: ChatRequest, db: Session = Depends(get_db)):
 
     model = payload.model or session.model or await get_default_model()
 
-    # 일반 전송: 새 사용자 메시지 저장. 재시도(regenerate): 기존 마지막 사용자 메시지 재사용
     if not payload.regenerate:
         if not payload.message:
             raise HTTPException(status_code=400, detail="message가 필요합니다.")
