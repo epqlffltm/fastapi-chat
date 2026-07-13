@@ -101,7 +101,7 @@ body {
 
 /* ---- 입력 폼 ---- */
 form { display: flex; gap: 8px; padding: 16px 20px; border-top: 1px solid #eee; }
-input[type="text"] { flex: 1; padding: 10px 14px; border-radius: 20px; border: 1px solid #ddd; font-size: 14px; }
+.message-input { flex: 1; padding: 10px 14px; border-radius: 20px; border: 1px solid #ddd; font-size: 14px; }
 input[type="text"]:focus { outline: none; border-color: #b5502f; }
 .send-btn {
     background: #b5502f; color: #fff; border: none; border-radius: 20px;
@@ -137,4 +137,54 @@ input[type="text"]:focus { outline: none; border-color: #b5502f; }
 .thinking-text {
     font-size: 12.5px; color: #a39a8f; font-style: italic;
     white-space: pre-wrap; line-height: 1.5; margin-top: 4px;
+}
+
+/* ---- 세션 검색 (입력창 + 버튼) ---- */
+.session-search-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.session-search-row .session-search-input {
+    flex: 1;
+    margin-bottom: 0;
+}
+.session-search-btn {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 6px;
+    background: #b5502f;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+}
+.session-search-btn:hover {
+    background: #9c4327;
+}
+
+/* ---- 마크다운 표 ---- */
+.md-table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+    width: 100%;
+}
+.md-table th, .md-table td {
+    border: 1px solid #e5ded7;
+    padding: 6px 10px;
+    text-align: left;
+}
+.md-table th {
+    background: #f4f1ee;
+    font-weight: 600;
+}
+.bot .md-table th {
+    background: #e9e3dd;
+}
+.user .md-table {
+    background: rgba(255, 255, 255, 0.1);
+}
+.user .md-table th, .user .md-table td {
+    border-color: rgba(255, 255, 255, 0.3);
 }

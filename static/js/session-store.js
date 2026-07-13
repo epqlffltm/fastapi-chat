@@ -98,3 +98,22 @@ function renderSessionList() {
         sessionListEl.appendChild(item);
     });
 }
+
+let searchDebounceTimer = null;
+
+async function searchSessions(query) {
+    const q = query.trim();
+    if (!q) {
+        await fetchSessions();
+        renderSessionList();
+        return;
+    }
+    const res = await fetch(`/sessions/search?q=${encodeURIComponent(q)}`);
+    sessions = await res.json();
+    renderSessionList();
+}
+
+function onSessionSearchInput(query) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => searchSessions(query), 250);
+}

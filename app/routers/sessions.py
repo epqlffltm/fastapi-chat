@@ -108,3 +108,27 @@ def delete_messages_from(session_id: str, message_id: int, db: Session = Depends
     ).delete(synchronize_session=False)
     db.commit()
     return {"deleted": True}
+
+@router.get("/sessions/search", response_model=list[SessionOut])
+def search_sessions(q: str, db: Session = Depends(get_db)):
+    query = q.strip()
+    if not query:
+        return db.query(ChatSession).order_by(ChatSession.updated_at.desc()).all()
+
+    pattern = f"%{query}%"
+
+    matching_session_ids = (
+        db.query(ChatMessage.session_id)
+        .filter(ChatMessage.content.ilike(pattern))
+        .distinct()
+    )
+
+    results = (
+        db.query(ChatSession)
+        .filter(
+            ChatSession.title.ilike(pattern) | ChatSession.id.in_(matching_session_ids)
+        )
+        .order_by(ChatSession.updated_at.desc())
+        .all()
+    )
+    return results

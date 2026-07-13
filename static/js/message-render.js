@@ -1,6 +1,7 @@
 // static/js/message-render.js
 // 채팅 메시지를 DOM에 렌더링 (코드 블록 감지 포함)
 //이제 msgObj.id가 DB의 실제 메시지 ID.
+//표를 파서 추가
 
 function rerenderChat() {
     const chatBox = document.getElementById("chat-box");
@@ -18,23 +19,73 @@ function copyText(text, btn) {
 
 function renderMessageContent(container, text) {
     container.innerHTML = "";
-    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    const blockRegex = /```(\w+)?\n([\s\S]*?)```|((?:^\|.+\|\s*$\n?)+)/gm;
     let lastIndex = 0;
     let match;
 
-    while ((match = codeBlockRegex.exec(text)) !== null) {
+    while ((match = blockRegex.exec(text)) !== null) {
         if (match.index > lastIndex) {
             appendPlainText(container, text.slice(lastIndex, match.index));
         }
-        const lang = match[1] || "";
-        const code = match[2].replace(/\n$/, "");
-        appendCodeBlock(container, lang, code);
-        lastIndex = codeBlockRegex.lastIndex;
+
+        if (match[0].startsWith("```")) {
+            const lang = match[1] || "";
+            const code = match[2].replace(/\n$/, "");
+            appendCodeBlock(container, lang, code);
+        } else if (isMarkdownTable(match[3])) {
+            appendTable(container, match[3]);
+        } else {
+            appendPlainText(container, match[0]);
+        }
+
+        lastIndex = blockRegex.lastIndex;
     }
 
     if (lastIndex < text.length) {
         appendPlainText(container, text.slice(lastIndex));
     }
+}
+
+function isMarkdownTable(block) {
+    if (!block) return false;
+    const lines = block.trim().split("\n");
+    return lines.length >= 2 && /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/.test(lines[1].trim());
+}
+
+function appendTable(container, block) {
+    const lines = block.trim().split("\n").map(l => l.trim());
+    const parseCells = (line) => line.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+
+    const headerCells = parseCells(lines[0]);
+    const bodyLines = lines.slice(2); // 1번째 줄 = 헤더, 2번째 줄 = 구분선(---)
+
+    const table = document.createElement("table");
+    table.className = "md-table";
+
+    const thead = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    headerCells.forEach(cellText => {
+        const th = document.createElement("th");
+        th.textContent = cellText;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    bodyLines.forEach(line => {
+        if (!line.startsWith("|")) return;
+        const row = document.createElement("tr");
+        parseCells(line).forEach(cellText => {
+            const td = document.createElement("td");
+            td.textContent = cellText;
+            row.appendChild(td);
+        });
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    container.appendChild(table);
 }
 
 function appendPlainText(container, text) {

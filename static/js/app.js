@@ -64,6 +64,17 @@ function setupEventListeners() {
     const modelSelect = document.getElementById("model-select");
     const form = document.getElementById("chat-form");
     const input = document.getElementById("message-input");
+    const searchInput = document.getElementById("session-search");
+    const searchBtn = document.getElementById("session-search-btn");
+
+    searchInput.addEventListener("input", (e) => {
+        onSessionSearchInput(e.target.value);
+    });
+
+    searchBtn.addEventListener("click", () => {
+        clearTimeout(searchDebounceTimer);
+        searchSessions(searchInput.value);
+    });
 
     modelSelect.addEventListener("change", async () => {
         updateNicknameDisplay();
