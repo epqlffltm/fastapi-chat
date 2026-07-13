@@ -37,7 +37,7 @@ def _load_system_prompt() -> str:
     ]
     for path in candidates:
         if path.exists():
-            return path.read_text(encoding="utf-8").strip()
+            return path.read_text(encoding="utf-8-sig").strip()
     return "당신은 유능하고 친절한 AI 어시스턴트입니다. 한국어로 답변하세요."
 
 SYSTEM_PROMPT = _load_system_prompt()
