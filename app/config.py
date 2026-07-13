@@ -2,7 +2,11 @@
 '''
 2026-07-11
 .env, 시스템 프롬프트 로딩
+
+2026-07-13
+DB연결
 '''
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -10,6 +14,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / "config" / ".env")
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"sqlite:///{(BASE_DIR / 'data' / 'chat.db').as_posix()}"
+)
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"

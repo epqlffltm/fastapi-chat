@@ -18,16 +18,24 @@
 
 2026-07-11
 챗봇 서버 - 라우터 분리
+
+2026-07-13
+시작 시 자동 생성 연결
 '''
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-
 from app.config import BASE_DIR
-from app.routers import pages, chat
+from app.database.database import init_db
+from app.routers import pages, chat, sessions
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 app.include_router(pages.router)
 app.include_router(chat.router)
+app.include_router(sessions.router)
+
+@app.on_event("startup")
+def on_startup():
+    init_db()

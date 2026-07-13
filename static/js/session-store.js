@@ -1,14 +1,11 @@
 // static/js/session-store.js
-// localStorage 기반 세션(대화방) 목록 관리
+// DB(API) 기반 세션 목록 관리.
+// 모델 별명만 예외적으로 localStorage 유지.
 
-let sessions = JSON.parse(localStorage.getItem("chat_sessions") || "[]");
+let sessions = [];
 let modelNicknames = JSON.parse(localStorage.getItem("chat_nicknames") || "{}");
 let currentSessionId = null;
 let conversationHistory = [];
-
-function saveSessions() {
-    localStorage.setItem("chat_sessions", JSON.stringify(sessions));
-}
 
 function saveNicknames() {
     localStorage.setItem("chat_nicknames", JSON.stringify(modelNicknames));
@@ -22,43 +19,53 @@ function nicknameFor(modelTag) {
     return modelNicknames[modelTag] || modelTag;
 }
 
-function persistCurrentMessages() {
-    const session = currentSession();
-    if (!session) return;
-    session.messages = conversationHistory;
-    saveSessions();
+async function fetchSessions() {
+    const res = await fetch("/sessions");
+    sessions = await res.json();
+}
+
+async function refreshSessionList() {
+    await fetchSessions();
     renderSessionList();
 }
 
-function startNewSession() {
-    const session = {
-        id: Date.now().toString(),
-        title: "새 대화",
-        model: document.getElementById("model-select").value,
-        messages: [],
-    };
-    sessions.unshift(session);
-    saveSessions();
-    switchSession(session.id);
+async function refreshCurrentMessages() {
+    const res = await fetch(`/sessions/${currentSessionId}/messages`);
+    conversationHistory = await res.json();
+    rerenderChat();
 }
 
-function switchSession(id) {
+async function startNewSession() {
+    const modelSelect = document.getElementById("model-select");
+    const res = await fetch("/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: modelSelect.value }),
+    });
+    const session = await res.json();
+    sessions.unshift(session);
+    await switchSession(session.id);
+}
+
+async function switchSession(id) {
     const session = sessions.find(s => s.id === id);
     if (!session) return;
+
     currentSessionId = id;
-    conversationHistory = session.messages;
     document.getElementById("model-select").value = session.model;
     updateNicknameDisplay();
-    rerenderChat();
+
+    await refreshCurrentMessages();
     renderSessionList();
 }
 
-function deleteSession(id) {
+async function deleteSession(id) {
+    await fetch(`/sessions/${id}`, { method: "DELETE" });
     sessions = sessions.filter(s => s.id !== id);
-    saveSessions();
+
     if (currentSessionId === id) {
-        if (sessions.length > 0) switchSession(sessions[0].id);
-        else startNewSession();
+        if (sessions.length > 0) await switchSession(sessions[0].id);
+        else await startNewSession();
     } else {
         renderSessionList();
     }
@@ -78,7 +85,12 @@ function renderSessionList() {
         const delBtn = document.createElement("button");
         delBtn.className = "session-del-btn";
         delBtn.textContent = "🗑️";
-        delBtn.onclick = (e) => { e.stopPropagation(); deleteSession(s.id); };
+        delBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (confirm("이 대화를 완전히 삭제할까요? 되돌릴 수 없습니다.")) {
+                deleteSession(s.id);
+            }
+        };
 
         item.appendChild(title);
         item.appendChild(delBtn);

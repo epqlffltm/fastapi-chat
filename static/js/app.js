@@ -1,5 +1,5 @@
 // static/js/app.js
-// 페이지 로드시 실행되는 진입점 - 모델 목록 불러오기, 이벤트 리스너 연결
+// 페이지 로드시 실행되는 진입점
 
 async function loadModels() {
     const modelSelect = document.getElementById("model-select");
@@ -13,10 +13,13 @@ async function loadModels() {
         modelSelect.appendChild(opt);
     });
 
+    await fetchSessions();
+    renderSessionList();
+
     if (sessions.length === 0) {
-        startNewSession();
+        await startNewSession();
     } else {
-        switchSession(sessions[0].id);
+        await switchSession(sessions[0].id);
     }
 }
 
@@ -62,47 +65,38 @@ function setupEventListeners() {
     const form = document.getElementById("chat-form");
     const input = document.getElementById("message-input");
 
-    modelSelect.addEventListener("change", () => {
+    modelSelect.addEventListener("change", async () => {
         updateNicknameDisplay();
         const session = currentSession();
-        if (session) { session.model = modelSelect.value; saveSessions(); }
+        if (session) {
+            await fetch(`/sessions/${session.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ model: modelSelect.value }),
+            });
+            session.model = modelSelect.value;
+        }
     });
 
     document.getElementById("new-chat-btn").addEventListener("click", startNewSession);
 
-    document.getElementById("reset-button").addEventListener("click", () => {
+    document.getElementById("reset-button").addEventListener("click", async () => {
+        if (!confirm("이 대화의 메시지를 모두 지울까요?")) return;
+        await fetch(`/sessions/${currentSessionId}/messages`, { method: "DELETE" });
         conversationHistory = [];
-        const session = currentSession();
-        if (session) { session.title = "새 대화"; }
-        persistCurrentMessages();
         rerenderChat();
+        await refreshSessionList();
     });
 
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
         const message = input.value.trim();
         if (!message) return;
-
-        const userMsg = { role: "user", content: message };
-        renderMessage(userMsg);
-        conversationHistory.push(userMsg);
-
-        const session = currentSession();
-        if (session && session.title === "새 대화") {
-            session.title = message.length > 20 ? message.slice(0, 20) + "…" : message;
-        }
-
-        if (conversationHistory.length > MAX_HISTORY) {
-            conversationHistory = conversationHistory.slice(-MAX_HISTORY);
-        }
-
         input.value = "";
-        persistCurrentMessages();
-        await requestReply();
+        await requestReply(message, false);
     });
 }
 
-// ---- 초기 실행 ----
 setupNicknameEditing();
 setupEventListeners();
 loadModels();

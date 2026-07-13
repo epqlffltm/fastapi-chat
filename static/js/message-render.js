@@ -1,5 +1,6 @@
 // static/js/message-render.js
 // 채팅 메시지를 DOM에 렌더링 (코드 블록 감지 포함)
+//이제 msgObj.id가 DB의 실제 메시지 ID.
 
 function rerenderChat() {
     const chatBox = document.getElementById("chat-box");
@@ -15,37 +16,36 @@ function copyText(text, btn) {
     });
 }
 
-// ```lang\n코드\n``` 패턴을 찾아서 일반 텍스트와 코드 블록을 분리 렌더링
-function renderMessageContent(bubble, text) {
-    bubble.innerHTML = "";
+function renderMessageContent(container, text) {
+    container.innerHTML = "";
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let lastIndex = 0;
     let match;
 
     while ((match = codeBlockRegex.exec(text)) !== null) {
         if (match.index > lastIndex) {
-            appendPlainText(bubble, text.slice(lastIndex, match.index));
+            appendPlainText(container, text.slice(lastIndex, match.index));
         }
         const lang = match[1] || "";
         const code = match[2].replace(/\n$/, "");
-        appendCodeBlock(bubble, lang, code);
+        appendCodeBlock(container, lang, code);
         lastIndex = codeBlockRegex.lastIndex;
     }
 
     if (lastIndex < text.length) {
-        appendPlainText(bubble, text.slice(lastIndex));
+        appendPlainText(container, text.slice(lastIndex));
     }
 }
 
-function appendPlainText(bubble, text) {
+function appendPlainText(container, text) {
     if (!text) return;
     const span = document.createElement("span");
     span.className = "plain-text";
     span.textContent = text;
-    bubble.appendChild(span);
+    container.appendChild(span);
 }
 
-function appendCodeBlock(bubble, lang, code) {
+function appendCodeBlock(container, lang, code) {
     const wrapper = document.createElement("div");
     wrapper.className = "code-block";
 
@@ -78,7 +78,37 @@ function appendCodeBlock(bubble, lang, code) {
 
     wrapper.appendChild(header);
     wrapper.appendChild(pre);
-    bubble.appendChild(wrapper);
+    container.appendChild(wrapper);
+}
+
+function ensureContentArea(bubble) {
+    let contentArea = bubble.querySelector(".content-area");
+    if (!contentArea) {
+        contentArea = document.createElement("div");
+        contentArea.className = "content-area";
+        bubble.appendChild(contentArea);
+    }
+    return contentArea;
+}
+
+function ensureThinkingBlock(bubble) {
+    let block = bubble.querySelector(".thinking-block");
+    if (!block) {
+        block = document.createElement("details");
+        block.className = "thinking-block";
+        block.open = true;
+
+        const summary = document.createElement("summary");
+        summary.textContent = "🤔 생각 중...";
+
+        const textDiv = document.createElement("div");
+        textDiv.className = "thinking-text";
+
+        block.appendChild(summary);
+        block.appendChild(textDiv);
+        bubble.insertBefore(block, bubble.firstChild);
+    }
+    return block;
 }
 
 function renderMessage(msgObj) {
@@ -92,7 +122,7 @@ function renderMessage(msgObj) {
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-    renderMessageContent(bubble, msgObj.content);
+    renderMessageContent(ensureContentArea(bubble), msgObj.content);
 
     const actions = document.createElement("div");
     actions.className = "msg-actions";
@@ -100,7 +130,7 @@ function renderMessage(msgObj) {
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.textContent = "📋";
-    copyBtn.title = "전체 복사";
+    copyBtn.title = "복사";
     copyBtn.onclick = () => copyText(bubble.textContent, copyBtn);
     actions.appendChild(copyBtn);
 
@@ -127,14 +157,4 @@ function renderMessage(msgObj) {
     chatBox.scrollTop = chatBox.scrollHeight;
 
     return { row, bubble, actions };
-}
-
-function removeRowsAfter(row) {
-    const chatBox = document.getElementById("chat-box");
-    let sibling = row.nextSibling;
-    while (sibling) {
-        const next = sibling.nextSibling;
-        chatBox.removeChild(sibling);
-        sibling = next;
-    }
 }
