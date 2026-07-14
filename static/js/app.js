@@ -1,32 +1,63 @@
 // static/js/app.js
-// 페이지 로드시 실행되는 진입점
+
+function showAppError(message) {
+    const banner = document.getElementById("app-error");
+    banner.textContent = message;
+    banner.hidden = false;
+}
+
+function clearAppError() {
+    const banner = document.getElementById("app-error");
+    banner.textContent = "";
+    banner.hidden = true;
+}
 
 async function loadModels() {
     const modelSelect = document.getElementById("model-select");
-    const res = await fetch("/models");
-    const data = await res.json();
-    modelSelect.innerHTML = "";
-    data.models.forEach((name) => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        modelSelect.appendChild(opt);
-    });
 
-    await fetchSessions();
-    renderSessionList();
+    try {
+        const res = await fetch("/models");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "모델 목록을 불러오지 못했습니다.");
+        if (!Array.isArray(data.models) || data.models.length === 0) {
+            throw new Error("설치된 Ollama 모델이 없습니다.");
+        }
 
-    if (sessions.length === 0) {
-        await startNewSession();
-    } else {
-        await switchSession(sessions[0].id);
+        modelSelect.innerHTML = "";
+        data.models.forEach((name) => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            modelSelect.appendChild(opt);
+        });
+        clearAppError();
+    } catch (err) {
+        modelSelect.innerHTML = '<option value="">모델 연결 안 됨</option>';
+        modelSelect.disabled = true;
+        document.getElementById("message-input").disabled = true;
+        document.querySelector(".send-btn").disabled = true;
+        showAppError(err.message);
+    }
+
+    try {
+        await fetchSessions();
+        renderSessionList();
+
+        if (sessions.length === 0) {
+            if (!modelSelect.value) return;
+            await startNewSession();
+        } else {
+            await switchSession(sessions[0].id);
+        }
+    } catch (err) {
+        showAppError(err.message);
     }
 }
 
 function updateNicknameDisplay() {
     const modelSelect = document.getElementById("model-select");
     const nicknameDisplay = document.getElementById("nickname-display");
-    nicknameDisplay.textContent = "🤖 " + nicknameFor(modelSelect.value);
+    nicknameDisplay.textContent = nicknameFor(modelSelect.value);
 }
 
 function setupNicknameEditing() {
@@ -34,6 +65,8 @@ function setupNicknameEditing() {
     const nicknameDisplay = document.getElementById("nickname-display");
 
     nicknameDisplay.addEventListener("click", () => {
+        if (!modelSelect.value) return;
+
         const tag = modelSelect.value;
         const inputEl = document.createElement("input");
         inputEl.type = "text";
@@ -53,9 +86,10 @@ function setupNicknameEditing() {
             updateNicknameDisplay();
             rerenderChat();
         };
+
         inputEl.addEventListener("blur", save);
-        inputEl.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") inputEl.blur();
+        inputEl.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") inputEl.blur();
         });
     });
 }
@@ -67,8 +101,8 @@ function setupEventListeners() {
     const searchInput = document.getElementById("session-search");
     const searchBtn = document.getElementById("session-search-btn");
 
-    searchInput.addEventListener("input", (e) => {
-        onSessionSearchInput(e.target.value);
+    searchInput.addEventListener("input", (event) => {
+        onSessionSearchInput(event.target.value);
     });
 
     searchBtn.addEventListener("click", () => {
@@ -99,8 +133,8 @@ function setupEventListeners() {
         await refreshSessionList();
     });
 
-    form.addEventListener("submit", async (e) => {
-        e.preventDefault();
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
         const message = input.value.trim();
         if (!message) return;
         input.value = "";
