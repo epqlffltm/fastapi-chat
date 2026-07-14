@@ -13,6 +13,7 @@ Ollama가 꺼져있을 때 앱이 죽는 버그 수정
 비동기 수정
 비동기 SQLAlchemy 적용 + Ollama 연결 실패 처리
 토큰 기반 히스토리 관리 적용
+스트리밍 중 DB 세션 관리가 불안정 수정
 '''
 
 import json
@@ -80,7 +81,7 @@ async def list_models():
         return {"models": [], "error": str(e)}
 
 @router.post("/chat")
-async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db, scope="function")):
     # 1. 세션 조회
     result = await db.execute(
         select(ChatSession).where(ChatSession.id == payload.session_id)
