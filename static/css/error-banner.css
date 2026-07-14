@@ -1,0 +1,9 @@
+.app-error {
+    margin: 12px 20px 0;
+    padding: 10px 12px;
+    background: #2b1d20;
+    color: #f0c7cc;
+    border: 1px solid #6b343c;
+    border-radius: 6px;
+    font-size: 13px;
+}
