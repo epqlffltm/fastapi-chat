@@ -1,18 +1,15 @@
 // static/js/message-render.js
-// 채팅 메시지를 DOM에 렌더링 (코드 블록 감지 포함)
-//이제 msgObj.id가 DB의 실제 메시지 ID.
-//표를 파서 추가
 
 function rerenderChat() {
     const chatBox = document.getElementById("chat-box");
     chatBox.innerHTML = "";
-    conversationHistory.forEach(m => renderMessage(m));
+    conversationHistory.forEach((message) => renderMessage(message));
 }
 
 function copyText(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
         const original = btn.textContent;
-        btn.textContent = "✅";
+        btn.textContent = "복사됨";
         setTimeout(() => { btn.textContent = original; }, 1200);
     });
 }
@@ -53,18 +50,17 @@ function isMarkdownTable(block) {
 }
 
 function appendTable(container, block) {
-    const lines = block.trim().split("\n").map(l => l.trim());
-    const parseCells = (line) => line.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+    const lines = block.trim().split("\n").map((line) => line.trim());
+    const parseCells = (line) => line.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
 
     const headerCells = parseCells(lines[0]);
-    const bodyLines = lines.slice(2); // 1번째 줄 = 헤더, 2번째 줄 = 구분선(---)
-
+    const bodyLines = lines.slice(2);
     const table = document.createElement("table");
     table.className = "md-table";
 
     const thead = document.createElement("thead");
     const headerRow = document.createElement("tr");
-    headerCells.forEach(cellText => {
+    headerCells.forEach((cellText) => {
         const th = document.createElement("th");
         th.textContent = cellText;
         headerRow.appendChild(th);
@@ -73,10 +69,10 @@ function appendTable(container, block) {
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
-    bodyLines.forEach(line => {
+    bodyLines.forEach((line) => {
         if (!line.startsWith("|")) return;
         const row = document.createElement("tr");
-        parseCells(line).forEach(cellText => {
+        parseCells(line).forEach((cellText) => {
             const td = document.createElement("td");
             td.textContent = cellText;
             row.appendChild(td);
@@ -84,7 +80,6 @@ function appendTable(container, block) {
         tbody.appendChild(row);
     });
     table.appendChild(tbody);
-
     container.appendChild(table);
 }
 
@@ -110,14 +105,8 @@ function appendCodeBlock(container, lang, code) {
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "code-copy-btn";
-    copyBtn.textContent = "📋 복사";
-    copyBtn.onclick = () => {
-        navigator.clipboard.writeText(code).then(() => {
-            const original = copyBtn.textContent;
-            copyBtn.textContent = "✅ 복사됨";
-            setTimeout(() => { copyBtn.textContent = original; }, 1200);
-        });
-    };
+    copyBtn.textContent = "복사";
+    copyBtn.onclick = () => copyText(code, copyBtn);
 
     header.appendChild(langLabel);
     header.appendChild(copyBtn);
@@ -150,7 +139,7 @@ function ensureThinkingBlock(bubble) {
         block.open = true;
 
         const summary = document.createElement("summary");
-        summary.textContent = "🤔 생각 중...";
+        summary.textContent = "생각 중...";
 
         const textDiv = document.createElement("div");
         textDiv.className = "thinking-text";
@@ -167,9 +156,13 @@ function renderMessage(msgObj) {
     const row = document.createElement("div");
     row.className = `msg-row ${msgObj.role === "user" ? "user" : "bot"}`;
 
+    const session = currentSession();
+    const selectedModel = document.getElementById("model-select")?.value;
+    const modelName = nicknameFor(session?.model ?? selectedModel);
+
     const nameLabel = document.createElement("div");
     nameLabel.className = "msg-name";
-    nameLabel.textContent = msgObj.role === "user" ? "🧑 나" : "🤖 " + nicknameFor(currentSession().model);
+    nameLabel.textContent = msgObj.role === "user" ? "나" : modelName;
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
@@ -180,24 +173,22 @@ function renderMessage(msgObj) {
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
-    copyBtn.textContent = "📋";
-    copyBtn.title = "복사";
-    copyBtn.onclick = () => copyText(bubble.textContent, copyBtn);
+    copyBtn.textContent = "복사";
+    copyBtn.title = "메시지 복사";
+    copyBtn.onclick = () => copyText(msgObj.content, copyBtn);
     actions.appendChild(copyBtn);
 
     if (msgObj.role === "user") {
         const editBtn = document.createElement("button");
         editBtn.type = "button";
-        editBtn.textContent = "✏️";
-        editBtn.title = "수정";
+        editBtn.textContent = "수정";
         editBtn.onclick = () => startEdit(msgObj, row, bubble);
         actions.appendChild(editBtn);
     } else {
         const retryBtn = document.createElement("button");
         retryBtn.type = "button";
-        retryBtn.textContent = "🔁";
-        retryBtn.title = "재시도";
-        retryBtn.onclick = () => retryFrom(msgObj, row);
+        retryBtn.textContent = "재시도";
+        retryBtn.onclick = () => retryFrom(msgObj);
         actions.appendChild(retryBtn);
     }
 
