@@ -1,5 +1,4 @@
 // static/js/chat-actions.js
-// 수정/재시도는 이제 DB의 메시지 id를 기준으로 서버에 삭제 요청 후 재생성
 
 async function startEdit(msgObj, row, bubble) {
     const actionsDiv = row.querySelector(".msg-actions");
@@ -12,14 +11,16 @@ async function startEdit(msgObj, row, bubble) {
     actionsDiv.style.display = "none";
     editInput.focus();
 
-    editInput.addEventListener("keydown", async (e) => {
-        if (e.key === "Enter") {
+    editInput.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter") {
             const newText = editInput.value.trim();
             if (!newText) return;
 
-            await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, { method: "DELETE" });
+            const res = await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("메시지를 수정하지 못했습니다.");
+            await refreshCurrentMessages();
             await requestReply(newText, false);
-        } else if (e.key === "Escape") {
+        } else if (event.key === "Escape") {
             editInput.replaceWith(bubble);
             actionsDiv.style.display = "";
         }
@@ -27,7 +28,9 @@ async function startEdit(msgObj, row, bubble) {
 }
 
 async function retryFrom(msgObj) {
-    await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, { method: "DELETE" });
+    const res = await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("응답을 다시 생성하지 못했습니다.");
+    await refreshCurrentMessages();
     await requestReply(null, true);
 }
 
@@ -47,12 +50,12 @@ async function requestReply(message, regenerate = false) {
     const placeholderObj = { id: null, role: "assistant", content: "" };
     const { bubble, actions } = renderMessage(placeholderObj);
     actions.style.display = "none";
-    bubble.innerHTML = '<span class="typing-dots">●●●</span>';
+    bubble.innerHTML = '<span class="typing-dots">...</span>';
 
     let fullText = "";
     let thinkingText = "";
     let firstChunk = true;
-    let errored = false;
+    let errorMessage = null;
 
     try {
         const res = await fetch("/chat", {
@@ -63,12 +66,19 @@ async function requestReply(message, regenerate = false) {
                 message: regenerate ? null : message,
                 model: document.getElementById("model-select").value,
                 think: thinkChecked,
-                regenerate: regenerate,
+                regenerate,
             }),
         });
 
         if (!res.ok || !res.body) {
-            throw new Error(`서버 오류 (status ${res.status}). 잠시 후 다시 시도해주세요.`);
+            let detail = `서버 오류 (status ${res.status})`;
+            try {
+                const body = await res.json();
+                detail = body.detail || detail;
+            } catch {
+                // JSON 오류 본문이 아닌 경우 기본 메시지를 사용한다.
+            }
+            throw new Error(detail);
         }
 
         const reader = res.body.getReader();
@@ -85,8 +95,13 @@ async function requestReply(message, regenerate = false) {
 
             for (const line of lines) {
                 if (!line.trim()) continue;
+
                 let evt;
-                try { evt = JSON.parse(line); } catch { continue; }
+                try {
+                    evt = JSON.parse(line);
+                } catch {
+                    continue;
+                }
 
                 if (firstChunk) {
                     bubble.innerHTML = "";
@@ -94,17 +109,16 @@ async function requestReply(message, regenerate = false) {
                 }
 
                 if (evt.type === "error") {
-                    errored = true;
-                    renderMessageContent(ensureContentArea(bubble), "⚠️ " + evt.text);
+                    errorMessage = evt.text;
                 } else if (evt.type === "thinking") {
                     thinkingText += evt.text;
                     const block = ensureThinkingBlock(bubble);
                     block.querySelector(".thinking-text").textContent = thinkingText;
                 } else if (evt.type === "content") {
                     const block = bubble.querySelector(".thinking-block");
-                    if (block && block.open) {
+                    if (block?.open) {
                         block.open = false;
-                        block.querySelector("summary").textContent = "🤔 생각 과정 보기";
+                        block.querySelector("summary").textContent = "생각 과정 보기";
                     }
                     fullText += evt.text;
                     renderMessageContent(ensureContentArea(bubble), fullText);
@@ -114,14 +128,19 @@ async function requestReply(message, regenerate = false) {
             }
         }
     } catch (err) {
-        errored = true;
-        renderMessageContent(ensureContentArea(bubble), "⚠️ " + err.message);
+        errorMessage = err.message;
     } finally {
-        if (!errored) {
-            // 스트리밍 완료 후 DB 기준으로 재동기화 (실제 id, 세션 제목/순서 반영)
+        try {
             await refreshCurrentMessages();
             await refreshSessionList();
+        } catch (syncError) {
+            errorMessage = errorMessage || syncError.message;
         }
+
+        if (errorMessage) {
+            renderMessage({ id: null, role: "assistant", content: `오류: ${errorMessage}` });
+        }
+
         input.disabled = false;
         submitButton.disabled = false;
         input.focus();
