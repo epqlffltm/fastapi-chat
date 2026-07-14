@@ -1,34 +1,45 @@
-#app/routers/chat.py
-
-'''
-2026-07-11
-GET /models, POST /chat
-
-2026-07-11
-챗봇 서버 - Pydantic 스키마 정의(app/schemas.py)로 이동
-스키마 정의 제거, import로 교체
-'''
-
 import json
 from datetime import datetime, timezone
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from app.config import OLLAMA_TAGS_URL, SYSTEM_PROMPT, MAX_HISTORY
+
+from app.config import MAX_HISTORY, OLLAMA_TAGS_URL, SYSTEM_PROMPT
 from app.database.database import get_db
-from app.database.models import ChatSession, ChatMessage
+from app.database.models import ChatMessage, ChatSession
 from app.ollama_client import get_default_model, ollama_stream
 from app.schemas import ChatRequest
 
 router = APIRouter()
 
+
 @router.get("/models")
 async def list_models():
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(OLLAMA_TAGS_URL)
-        data = response.json()
-    return {"models": [m["name"] for m in data.get("models", [])]}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(OLLAMA_TAGS_URL)
+            response.raise_for_status()
+    except httpx.ConnectError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Ollama 서버에 연결할 수 없습니다. Ollama가 실행 중인지 확인해주세요.",
+        ) from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="Ollama 서버 응답 시간이 초과되었습니다.",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Ollama 서버가 오류를 반환했습니다. (status {exc.response.status_code})",
+        ) from exc
+
+    data = response.json()
+    return {"models": [model["name"] for model in data.get("models", [])]}
+
 
 @router.post("/chat")
 async def chat(payload: ChatRequest, db: Session = Depends(get_db)):
@@ -56,20 +67,25 @@ async def chat(payload: ChatRequest, db: Session = Depends(get_db)):
     history.reverse()
 
     ollama_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    ollama_messages += [{"role": m.role, "content": m.content} for m in history]
+    ollama_messages += [{"role": message.role, "content": message.content} for message in history]
 
     async def stream_and_save():
         full_text = ""
+        stream_failed = False
+
         async for chunk in ollama_stream(model, ollama_messages, payload.think):
             try:
-                evt = json.loads(chunk)
-                if evt.get("type") == "content":
-                    full_text += evt["text"]
+                event = json.loads(chunk)
+                if event.get("type") == "content":
+                    full_text += event["text"]
+                elif event.get("type") == "error":
+                    stream_failed = True
             except json.JSONDecodeError:
-                pass
+                stream_failed = True
+
             yield chunk
 
-        if full_text:
+        if full_text and not stream_failed:
             db.add(ChatMessage(session_id=payload.session_id, role="assistant", content=full_text))
             session.updated_at = datetime.now(timezone.utc)
             db.commit()
