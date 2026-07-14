@@ -1,4 +1,4 @@
-#app/main.py
+# app/main.py
 
 '''
 2026-07-09
@@ -21,21 +21,33 @@
 
 2026-07-13
 시작 시 자동 생성 연결
+
+2026-07-14
+DB 초기화 실행 버그 수정
 '''
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.config import BASE_DIR
-from app.database.database import init_db
-from app.routers import pages, chat, sessions
+from app.database.database import init_db,engine
+from app.routers import chat, pages, sessions
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 애플리케이션 시작 시 DB 테이블 생성
+    await init_db()
+    yield
+    await engine.dispose()
+
+app = FastAPI(lifespan=lifespan)
+
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static",
+)
 
 app.include_router(pages.router)
 app.include_router(chat.router)
 app.include_router(sessions.router)
-
-@app.on_event("startup")
-def on_startup():
-    init_db()
