@@ -2,13 +2,14 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title }}</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
     <aside class="sidebar">
         <div class="app-title">{{ title }}</div>
-        <button class="new-chat-btn" id="new-chat-btn" type="button">➕ 새 대화</button>
+        <button class="new-chat-btn" id="new-chat-btn" type="button">새 대화</button>
         <div class="session-search-row">
             <input type="text" id="session-search" class="session-search-input" placeholder="대화 검색">
             <button type="button" id="session-search-btn" class="session-search-btn">검색</button>
@@ -17,22 +18,23 @@
     </aside>
 
     <main class="chat-panel">
+        <div id="app-error" class="app-error" role="alert" hidden></div>
         <div class="top-bar">
-    <select id="model-select"></select>
-    <label class="think-toggle">
-        <input type="checkbox" id="think-checkbox">
-        생각 과정 보기
-    </label>
-    <div class="nickname-wrap">
-        <span id="nickname-display" class="nickname-display" title="클릭해서 별명 수정"></span>
-    </div>
-    <button id="reset-button" class="icon-btn" type="button" title="이 대화 지우기">🗑️</button>
-</div>
+            <select id="model-select"></select>
+            <label class="think-toggle">
+                <input type="checkbox" id="think-checkbox">
+                생각 과정 보기
+            </label>
+            <div class="nickname-wrap">
+                <span id="nickname-display" class="nickname-display" title="클릭해서 별명 수정"></span>
+            </div>
+            <button id="reset-button" class="icon-btn" type="button" title="이 대화 지우기">대화 지우기</button>
+        </div>
         <div id="chat-box"></div>
 
         <form id="chat-form">
             <input type="text" id="message-input" class="message-input" placeholder="메시지를 입력하세요" required>
-            <button class="send-btn" type="submit">➤</button>
+            <button class="send-btn" type="submit">전송</button>
         </form>
     </main>
 
