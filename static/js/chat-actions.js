@@ -1,5 +1,5 @@
 // static/js/chat-actions.js
-// 수정/재시도는 이제 DB의 메시지 id를 기준으로 서버에 삭제 요청 후 재생성
+// 메시지 수정(Edit) / 재시도(Retry) 및 스트리밍 요청 처리
 
 async function startEdit(msgObj, row, bubble) {
     const actionsDiv = row.querySelector(".msg-actions");
@@ -17,9 +17,13 @@ async function startEdit(msgObj, row, bubble) {
             const newText = editInput.value.trim();
             if (!newText) return;
 
-            await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, { method: "DELETE" });
+            // DB에서 해당 메시지 이후 모두 삭제 후 재생성
+            await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, {
+                method: "DELETE"
+            });
             await requestReply(newText, false);
-        } else if (e.key === "Escape") {
+        } 
+        else if (e.key === "Escape") {
             editInput.replaceWith(bubble);
             actionsDiv.style.display = "";
         }
@@ -27,7 +31,10 @@ async function startEdit(msgObj, row, bubble) {
 }
 
 async function retryFrom(msgObj) {
-    await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, { method: "DELETE" });
+    // 해당 메시지 이후 모두 삭제 후 재생성
+    await fetch(`/sessions/${currentSessionId}/messages/from/${msgObj.id}`, {
+        method: "DELETE"
+    });
     await requestReply(null, true);
 }
 
@@ -40,10 +47,12 @@ async function requestReply(message, regenerate = false) {
     input.disabled = true;
     submitButton.disabled = true;
 
+    // 사용자 메시지 즉시 렌더링 (regenerate가 아닐 때만)
     if (!regenerate && message) {
         renderMessage({ id: null, role: "user", content: message });
     }
 
+    // 어시스턴트 플레이스홀더 생성
     const placeholderObj = { id: null, role: "assistant", content: "" };
     const { bubble, actions } = renderMessage(placeholderObj);
     actions.style.display = "none";
@@ -85,9 +94,15 @@ async function requestReply(message, regenerate = false) {
 
             for (const line of lines) {
                 if (!line.trim()) continue;
-                let evt;
-                try { evt = JSON.parse(line); } catch { continue; }
 
+                let evt;
+                try {
+                    evt = JSON.parse(line);
+                } catch {
+                    continue;
+                }
+
+                // 첫 번째 청크가 오면 플레이스홀더 초기화
                 if (firstChunk) {
                     bubble.innerHTML = "";
                     firstChunk = false;
@@ -95,16 +110,19 @@ async function requestReply(message, regenerate = false) {
 
                 if (evt.type === "error") {
                     errored = true;
-                    renderMessageContent(ensureContentArea(bubble), "⚠️ " + evt.text);
-                } else if (evt.type === "thinking") {
+                    renderMessageContent(ensureContentArea(bubble), "Warning: " + evt.text);
+                } 
+                else if (evt.type === "thinking") {
                     thinkingText += evt.text;
                     const block = ensureThinkingBlock(bubble);
                     block.querySelector(".thinking-text").textContent = thinkingText;
-                } else if (evt.type === "content") {
-                    const block = bubble.querySelector(".thinking-block");
-                    if (block && block.open) {
-                        block.open = false;
-                        block.querySelector("summary").textContent = "🤔 생각 과정 보기";
+                } 
+                else if (evt.type === "content") {
+                    // Thinking 블록이 열려있으면 닫기
+                    const thinkingBlock = bubble.querySelector(".thinking-block");
+                    if (thinkingBlock && thinkingBlock.open) {
+                        thinkingBlock.open = false;
+                        thinkingBlock.querySelector("summary").textContent = "Thinking: 생각 과정 보기";
                     }
                     fullText += evt.text;
                     renderMessageContent(ensureContentArea(bubble), fullText);
@@ -113,12 +131,14 @@ async function requestReply(message, regenerate = false) {
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
         }
-    } catch (err) {
+    } 
+    catch (err) {
         errored = true;
-        renderMessageContent(ensureContentArea(bubble), "⚠️ " + err.message);
-    } finally {
+        renderMessageContent(ensureContentArea(bubble), "Warning: " + err.message);
+    } 
+    finally {
+        // 에러가 없었을 때만 DB 기준으로 재동기화
         if (!errored) {
-            // 스트리밍 완료 후 DB 기준으로 재동기화 (실제 id, 세션 제목/순서 반영)
             await refreshCurrentMessages();
             await refreshSessionList();
         }

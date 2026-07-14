@@ -2,30 +2,46 @@
 
 '''
 2026-07-13
+db 연결
 
+2026-07-14
+비동기로 교체
 '''
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
+from sqlalchemy.orm import DeclarativeBase
 from app.config import DATABASE_URL
 
-# SQLite는 기본적으로 하나의 스레드에서만 연결을 쓰도록 강제하는데,
-# FastAPI는 요청마다 다른 스레드/태스크를 쓸 수 있어서 이 옵션이 필요함
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
+# SQLite → aiosqlite 드라이버 자동 변환
+if DATABASE_URL.startswith("sqlite"):
+    ASYNC_DATABASE_URL = DATABASE_URL.replace("sqlite:///", "sqlite+aiosqlite:///")
+else:
+    ASYNC_DATABASE_URL = DATABASE_URL
+
+engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# 여기서 이름을 SessionLocal로 통일 (chat.py와 맞추기 위함)
+SessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-def init_db():#앱 시작 시 호출 — 테이블이 없으면 생성, 있으면 아무 것도 안 함
-    Base.metadata.create_all(bind=engine)
+async def get_db():
+    async with SessionLocal() as session:
+        yield session

@@ -3,30 +3,70 @@
 
 async function loadModels() {
     const modelSelect = document.getElementById("model-select");
-    const res = await fetch("/models");
-    const data = await res.json();
-    modelSelect.innerHTML = "";
-    data.models.forEach((name) => {
+
+    try {
+        const res = await fetch("/models");
+        const data = await res.json();
+
+        // Ollama가 꺼져있거나 에러가 발생한 경우
+        if (data.error) {
+            modelSelect.innerHTML = "";
+            const opt = document.createElement("option");
+            opt.textContent = "⚠️ Ollama 연결 실패";
+            opt.disabled = true;
+            modelSelect.appendChild(opt);
+
+            console.error("[Ollama Error]", data.error);
+
+            // 채팅 영역에 안내 메시지 표시
+            const chatBox = document.getElementById("chat-box");
+            chatBox.innerHTML = `
+                <div style="padding: 40px 20px; text-align: center; color: #666; line-height: 1.6;">
+                    <p style="font-size: 15px; margin-bottom: 8px;">
+                        <strong>Ollama 서버에 연결할 수 없습니다.</strong>
+                    </p>
+                    <p style="font-size: 13px; color: #888;">
+                        Ollama를 실행한 후 페이지를 새로고침 해주세요.<br>
+                        <code style="background:#f1f1f1; padding:1px 6px; border-radius:4px; font-size:12px;">ollama serve</code>
+                    </p>
+                </div>
+            `;
+            return;
+        }
+
+        // 정상 로드
+        modelSelect.innerHTML = "";
+        data.models.forEach((name) => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            modelSelect.appendChild(opt);
+        });
+
+        await fetchSessions();
+        renderSessionList();
+
+        if (sessions.length === 0) {
+            await startNewSession();
+        } else {
+            await switchSession(sessions[0].id);
+        }
+
+    } catch (err) {
+        console.error("Failed to load models:", err);
+        modelSelect.innerHTML = "";
         const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
+        opt.textContent = "⚠️ 서버 연결 실패";
+        opt.disabled = true;
         modelSelect.appendChild(opt);
-    });
-
-    await fetchSessions();
-    renderSessionList();
-
-    if (sessions.length === 0) {
-        await startNewSession();
-    } else {
-        await switchSession(sessions[0].id);
     }
 }
 
 function updateNicknameDisplay() {
     const modelSelect = document.getElementById("model-select");
     const nicknameDisplay = document.getElementById("nickname-display");
-    nicknameDisplay.textContent = "🤖 " + nicknameFor(modelSelect.value);
+    const modelName = nicknameFor(modelSelect.value);
+    nicknameDisplay.textContent = modelName ? `Bot · ${modelName}` : "Bot";
 }
 
 function setupNicknameEditing() {
@@ -108,6 +148,7 @@ function setupEventListeners() {
     });
 }
 
+// 초기화
 setupNicknameEditing();
 setupEventListeners();
 loadModels();

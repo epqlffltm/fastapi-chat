@@ -1,7 +1,5 @@
 // static/js/message-render.js
-// 채팅 메시지를 DOM에 렌더링 (코드 블록 감지 포함)
-//이제 msgObj.id가 DB의 실제 메시지 ID.
-//표를 파서 추가
+// 채팅 메시지를 DOM에 렌더링 (코드 블록 + 마크다운 테이블 지원)
 
 function rerenderChat() {
     const chatBox = document.getElementById("chat-box");
@@ -12,7 +10,7 @@ function rerenderChat() {
 function copyText(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
         const original = btn.textContent;
-        btn.textContent = "✅";
+        btn.textContent = "Copied";
         setTimeout(() => { btn.textContent = original; }, 1200);
     });
 }
@@ -57,7 +55,7 @@ function appendTable(container, block) {
     const parseCells = (line) => line.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
 
     const headerCells = parseCells(lines[0]);
-    const bodyLines = lines.slice(2); // 1번째 줄 = 헤더, 2번째 줄 = 구분선(---)
+    const bodyLines = lines.slice(2);
 
     const table = document.createElement("table");
     table.className = "md-table";
@@ -110,11 +108,11 @@ function appendCodeBlock(container, lang, code) {
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "code-copy-btn";
-    copyBtn.textContent = "📋 복사";
+    copyBtn.textContent = "Copy";
     copyBtn.onclick = () => {
         navigator.clipboard.writeText(code).then(() => {
             const original = copyBtn.textContent;
-            copyBtn.textContent = "✅ 복사됨";
+            copyBtn.textContent = "Copied";
             setTimeout(() => { copyBtn.textContent = original; }, 1200);
         });
     };
@@ -150,7 +148,7 @@ function ensureThinkingBlock(bubble) {
         block.open = true;
 
         const summary = document.createElement("summary");
-        summary.textContent = "🤔 생각 중...";
+        summary.textContent = "Thinking...";
 
         const textDiv = document.createElement("div");
         textDiv.className = "thinking-text";
@@ -169,7 +167,24 @@ function renderMessage(msgObj) {
 
     const nameLabel = document.createElement("div");
     nameLabel.className = "msg-name";
-    nameLabel.textContent = msgObj.role === "user" ? "🧑 나" : "🤖 " + nicknameFor(currentSession().model);
+
+    // 이모지 제거 + 안전한 모델 이름 표시 (Bug 1 방어)
+    if (msgObj.role === "user") {
+        nameLabel.textContent = "나";
+    } else {
+        const session = (typeof currentSession === "function") ? currentSession() : null;
+        let modelName = "";
+
+        if (session && session.model) {
+            modelName = nicknameFor(session.model);
+        } else {
+            const modelSelect = document.getElementById("model-select");
+            if (modelSelect && modelSelect.value) {
+                modelName = nicknameFor(modelSelect.value);
+            }
+        }
+        nameLabel.textContent = modelName ? `Bot · ${modelName}` : "Bot";
+    }
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
@@ -180,24 +195,24 @@ function renderMessage(msgObj) {
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
-    copyBtn.textContent = "📋";
-    copyBtn.title = "복사";
+    copyBtn.textContent = "Copy";
+    copyBtn.title = "Copy";
     copyBtn.onclick = () => copyText(bubble.textContent, copyBtn);
     actions.appendChild(copyBtn);
 
     if (msgObj.role === "user") {
         const editBtn = document.createElement("button");
         editBtn.type = "button";
-        editBtn.textContent = "✏️";
-        editBtn.title = "수정";
+        editBtn.textContent = "Edit";
+        editBtn.title = "Edit";
         editBtn.onclick = () => startEdit(msgObj, row, bubble);
         actions.appendChild(editBtn);
     } else {
         const retryBtn = document.createElement("button");
         retryBtn.type = "button";
-        retryBtn.textContent = "🔁";
-        retryBtn.title = "재시도";
-        retryBtn.onclick = () => retryFrom(msgObj, row);
+        retryBtn.textContent = "Retry";
+        retryBtn.title = "Retry";
+        retryBtn.onclick = () => retryFrom(msgObj);
         actions.appendChild(retryBtn);
     }
 

@@ -5,6 +5,9 @@
 
 2026-07-13
 DB연결
+
+2026-07-14
+token기반으로 변경
 '''
 
 import os
@@ -27,7 +30,10 @@ OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 OLLAMA_TAGS_URL = f"{OLLAMA_HOST}/api/tags"
 
 NUM_THREAD = int(os.getenv("NUM_THREAD", "8"))
-MAX_HISTORY = int(os.getenv("MAX_HISTORY", "14"))
+
+MAX_HISTORY_MESSAGES = 30          # 최대 메시지 개수 (안전장치)
+MAX_CONTEXT_TOKENS = 8192          # 모델이 사용할 수 있는 최대 컨텍스트 토큰 수
+RESERVED_TOKENS = 1024             # 응답 + 시스템 프롬프트용으로 남겨둘 토큰 수
 
 # --- 시스템 프롬프트 해결 ---
 def _load_system_prompt() -> str:

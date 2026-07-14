@@ -1,8 +1,9 @@
 // static/js/session-store.js
 // DB(API) 기반 세션 목록 관리.
-// 모델 별명만 예외적으로 localStorage 유지.
+// sessions = 전체 원본, displayedSessions = 현재 화면에 보여줄 목록
 
-let sessions = [];
+let sessions = [];              // 항상 전체 세션 원본 (절대 덮어쓰지 않음)
+let displayedSessions = [];     // 검색 결과 등 화면에 보여줄 세션
 let modelNicknames = JSON.parse(localStorage.getItem("chat_nicknames") || "{}");
 let currentSessionId = null;
 let conversationHistory = [];
@@ -22,6 +23,7 @@ function nicknameFor(modelTag) {
 async function fetchSessions() {
     const res = await fetch("/sessions");
     sessions = await res.json();
+    displayedSessions = [...sessions];   // ← 중요: displayedSessions도 갱신
 }
 
 async function refreshSessionList() {
@@ -44,6 +46,7 @@ async function startNewSession() {
     });
     const session = await res.json();
     sessions.unshift(session);
+    displayedSessions = [...sessions];
     await switchSession(session.id);
 }
 
@@ -62,6 +65,7 @@ async function switchSession(id) {
 async function deleteSession(id) {
     await fetch(`/sessions/${id}`, { method: "DELETE" });
     sessions = sessions.filter(s => s.id !== id);
+    displayedSessions = displayedSessions.filter(s => s.id !== id);
 
     if (currentSessionId === id) {
         if (sessions.length > 0) await switchSession(sessions[0].id);
@@ -74,7 +78,8 @@ async function deleteSession(id) {
 function renderSessionList() {
     const sessionListEl = document.getElementById("session-list");
     sessionListEl.innerHTML = "";
-    sessions.forEach((s) => {
+
+    displayedSessions.forEach((s) => {
         const item = document.createElement("div");
         item.className = "session-item" + (s.id === currentSessionId ? " active" : "");
 
@@ -84,7 +89,7 @@ function renderSessionList() {
 
         const delBtn = document.createElement("button");
         delBtn.className = "session-del-btn";
-        delBtn.textContent = "🗑️";
+        delBtn.textContent = "Delete";
         delBtn.onclick = (e) => {
             e.stopPropagation();
             if (confirm("이 대화를 완전히 삭제할까요? 되돌릴 수 없습니다.")) {
@@ -104,12 +109,12 @@ let searchDebounceTimer = null;
 async function searchSessions(query) {
     const q = query.trim();
     if (!q) {
-        await fetchSessions();
+        displayedSessions = [...sessions];
         renderSessionList();
         return;
     }
     const res = await fetch(`/sessions/search?q=${encodeURIComponent(q)}`);
-    sessions = await res.json();
+    displayedSessions = await res.json();
     renderSessionList();
 }
 

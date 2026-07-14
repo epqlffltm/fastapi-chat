@@ -3,64 +3,97 @@
 '''
 2026-07-13
 스키마 정의 제거, import로 교체
+
+2026-07-14
+비동기 마이그레이션
 '''
+
+# app/routers/sessions.py
 
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.database import get_db
 from app.database.models import ChatSession, ChatMessage
 from app.schemas import SessionCreate, SessionUpdate, SessionOut, MessageOut
 
 router = APIRouter()
 
+
 @router.get("/sessions", response_model=list[SessionOut])
-def list_sessions(db: Session = Depends(get_db)):
-    return db.query(ChatSession).order_by(ChatSession.updated_at.desc()).all()
+async def list_sessions(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ChatSession).order_by(ChatSession.updated_at.desc())
+    )
+    return result.scalars().all()
+
 
 @router.get("/sessions/search", response_model=list[SessionOut])
-def search_sessions(q: str, db: Session = Depends(get_db)):
+async def search_sessions(q: str, db: AsyncSession = Depends(get_db)):
     query = q.strip()
     if not query:
-        return db.query(ChatSession).order_by(ChatSession.updated_at.desc()).all()
+        result = await db.execute(
+            select(ChatSession).order_by(ChatSession.updated_at.desc())
+        )
+        return result.scalars().all()
 
     pattern = f"%{query}%"
 
-    matching_session_ids = (
-        db.query(ChatMessage.session_id)
-        .filter(ChatMessage.content.ilike(pattern))
-        .distinct()
-    )
+    # 메시지 내용 검색
+    msg_stmt = select(ChatMessage.session_id).where(
+        ChatMessage.content.ilike(pattern)
+    ).distinct()
+    msg_result = await db.execute(msg_stmt)
+    matching_ids = msg_result.scalars().all()
 
-    results = (
-        db.query(ChatSession)
-        .filter(
-            ChatSession.title.ilike(pattern) | ChatSession.id.in_(matching_session_ids)
+    stmt = (
+        select(ChatSession)
+        .where(
+            (ChatSession.title.ilike(pattern)) | 
+            (ChatSession.id.in_(matching_ids))
         )
         .order_by(ChatSession.updated_at.desc())
-        .all()
     )
-    return results
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
 
 @router.post("/sessions", response_model=SessionOut)
-def create_session(payload: SessionCreate, db: Session = Depends(get_db)):
-    session = ChatSession(id=str(uuid.uuid4()), title="새 대화", model=payload.model)
+async def create_session(payload: SessionCreate, db: AsyncSession = Depends(get_db)):
+    session = ChatSession(
+        id=str(uuid.uuid4()),
+        title="새 대화",
+        model=payload.model
+    )
     db.add(session)
-    db.commit()
-    db.refresh(session)
+    await db.commit()
+    await db.refresh(session)
     return session
 
+
 @router.get("/sessions/{session_id}/messages", response_model=list[MessageOut])
-def get_messages(session_id: str, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+async def get_messages(session_id: str, db: AsyncSession = Depends(get_db)):
+    session = await db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
-    return session.messages
+    
+    result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.id)
+    )
+    return result.scalars().all()
+
 
 @router.patch("/sessions/{session_id}", response_model=SessionOut)
-def update_session(session_id: str, payload: SessionUpdate, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+async def update_session(
+    session_id: str, 
+    payload: SessionUpdate, 
+    db: AsyncSession = Depends(get_db)
+):
+    session = await db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
@@ -70,39 +103,51 @@ def update_session(session_id: str, payload: SessionUpdate, db: Session = Depend
         session.model = payload.model
 
     session.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(session)
+    await db.commit()
+    await db.refresh(session)
     return session
 
+
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: str, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
+    session = await db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
-    db.delete(session)
-    db.commit()
+    
+    await db.delete(session)
+    await db.commit()
     return {"deleted": True}
 
+
 @router.delete("/sessions/{session_id}/messages")
-def clear_messages(session_id: str, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+async def clear_messages(session_id: str, db: AsyncSession = Depends(get_db)):
+    session = await db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
-    db.query(ChatMessage).filter(ChatMessage.session_id == session_id).delete(synchronize_session=False)
+    await db.execute(
+        delete(ChatMessage).where(ChatMessage.session_id == session_id)
+    )
     session.title = "새 대화"
-    db.commit()
+    await db.commit()
     return {"cleared": True}
 
+
 @router.delete("/sessions/{session_id}/messages/from/{message_id}")
-def delete_messages_from(session_id: str, message_id: int, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+async def delete_messages_from(
+    session_id: str, 
+    message_id: int, 
+    db: AsyncSession = Depends(get_db)
+):
+    session = await db.get(ChatSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
 
-    db.query(ChatMessage).filter(
-        ChatMessage.session_id == session_id,
-        ChatMessage.id >= message_id,
-    ).delete(synchronize_session=False)
-    db.commit()
+    await db.execute(
+        delete(ChatMessage).where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.id >= message_id
+        )
+    )
+    await db.commit()
     return {"deleted": True}
