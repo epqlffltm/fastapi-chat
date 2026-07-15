@@ -1,18 +1,45 @@
 [project]
-name = "chat"
+name = "fastapi-chat"
 version = "0.1.0"
-description = "Add your description here"
+description = "로컬 Ollama 모델용 스트리밍 채팅 서버. NDJSON 스트리밍, thinking 토큰 분리, 추론 메트릭."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiosqlite>=0.22.1",
-    "alembic>=1.18.5",
     "fastapi>=0.139.0",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "python-dotenv>=1.2.2",
-    "python-multipart>=0.0.32",
     "sqlalchemy>=2.0.51",
-    "tiktoken>=0.13.0",
     "uvicorn[standard]>=0.51.0",
 ]
+# 제거된 것:
+#   tiktoken        — 런타임에 OpenAI Azure 블롭에서 인코딩을 받아온다. 로컬 앱에 부적합.
+#                     게다가 cl100k_base 는 Qwen 토크나이저가 아니라 계산도 틀렸다.
+#   python-multipart — 파일 업로드도 Form 엔드포인트도 없다. 한 번도 안 쓰였다.
+#   alembic          — 마이그레이션 파일이 하나도 없다. 메시지에 메트릭 컬럼을 붙일 때
+#                      되살릴 것. (create_all() 은 기존 테이블에 컬럼을 못 붙인다.)
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.22",
+    "ruff>=0.9",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["app/test"]
+pythonpath = [".", "app/test"]
+#asyncio_mode = "auto" - 줄 삭제 — 동기 TestClient만 쓰므로 불필요
+
+[tool.ruff.lint.flake8-bugbear]
+# Depends()/Query()/Body() 를 기본 인자로 쓰는 건 FastAPI의 정식 관용구다.
+# B008(가변 기본인자 경고)의 오탐이므로 면제한다.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]

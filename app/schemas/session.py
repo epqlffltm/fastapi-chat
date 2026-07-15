@@ -3,10 +3,14 @@
 '''
 2026-07-13
 스키마 분리
+
+2026-07-15
+class Config 수정
 '''
 
 from datetime import datetime
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 class SessionCreate(BaseModel):
     model: str
@@ -21,13 +25,13 @@ class SessionOut(BaseModel):
     model: str
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    class SessionOut(BaseModel):
+        model_config = ConfigDict(from_attributes=True)
 
 class MessageOut(BaseModel):
     id: int
     role: str
     content: str
 
-    class Config:
-        from_attributes = True
+    class SessionOut(BaseModel):
+        model_config = ConfigDict(from_attributes=True)

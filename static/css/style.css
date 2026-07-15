@@ -34,6 +34,10 @@
     --accent-down: #2f7fd8;
     --accent-wash: #16273c;
 
+    /* 경고 */
+    --warn:      #f0a63c;
+    --warn-wash: #2e2314;
+
     /* 내 말풍선. 액센트가 아니라 딥 스틸블루 —
        액센트는 "누를 수 있다"는 뜻이고, 말풍선은 누르는 게 아니다 */
     --bubble-me: #24507e;
@@ -597,4 +601,114 @@ input:focus { border-color: var(--accent); }
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* ══════════════════════════════════════════════════════════
+   2026-07-15 추가분
+   ══════════════════════════════════════════════════════════ */
+
+/* 이모지 아이콘 버튼 → 텍스트 버튼 */
+.ghost-btn {
+    flex-shrink: 0;
+    padding: 5px 8px;
+    background: none;
+    color: var(--text-faint);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.ghost-btn:hover {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+/* 검색 결과 없음 */
+.session-empty {
+    padding: 12px 10px;
+    color: var(--text-faint);
+    font-size: 12px;
+}
+
+/* 삭제 버튼이 이모지에서 × 글자로 바뀌었으므로 color 가 필요하다 */
+.session-del-btn {
+    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.session-item:hover .session-del-btn:hover { color: var(--text); }
+
+/* 앱 실패 배너.
+   에러는 뭐가 잘못됐고 어떻게 고치는지를 말해야 한다. 분위기만 잡으면 안 된다. */
+.app-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 20px 0;
+    padding: 10px 14px;
+    background: var(--warn-wash, #2e2314);
+    color: var(--warn, #f0a63c);
+    border: 1px solid var(--warn, #f0a63c);
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.app-error-retry {
+    flex-shrink: 0;
+    padding: 5px 10px;
+    background: none;
+    color: inherit;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.app-error-retry:hover {
+    background: var(--warn, #f0a63c);
+    color: var(--bg);
+}
+
+/* 스트리밍 중 발생한 에러. 말풍선인 척하지 않는다. */
+.notice {
+    align-self: center;
+    max-width: 90%;
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: var(--warn-wash, #2e2314);
+    color: var(--warn, #f0a63c);
+    border: 1px solid var(--warn, #f0a63c);
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+/* 추론 메트릭. 숫자는 기계 데이터 → 모노스페이스. */
+.msg-stats {
+    margin-top: 4px;
+    padding: 0 6px;
+    color: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+}
+
+/* 스트리밍 중 input 이 disabled 인데 스타일이 없었다 = 잠긴 게 안 보였다 */
+.message-input:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.new-chat-btn:disabled,
+.send-btn:disabled {
+    background: var(--line);
+    color: var(--text-faint);
+    cursor: not-allowed;
 }
