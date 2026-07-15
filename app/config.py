@@ -15,6 +15,7 @@ tiktoken 제거. 컨텍스트 길이를 하드코딩하지 않고 Ollama에서 �
 
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -59,6 +60,7 @@ RESERVE_FOR_REPLY = int(os.getenv("RESERVE_FOR_REPLY", "2048"))
 # 토큰 예산과 별개인 안전장치. 아무리 짧은 메시지라도 이 개수 이상은 안 보낸다.
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "40"))
 
+
 # --- 시스템 프롬프트 ---
 def _load_system_prompt() -> str:
     candidates = [
@@ -69,5 +71,6 @@ def _load_system_prompt() -> str:
         if path.exists():
             return path.read_text(encoding="utf-8-sig").strip()
     return "당신은 유능하고 친절한 AI 어시스턴트입니다. 한국어로 답변하세요."
+
 
 SYSTEM_PROMPT = _load_system_prompt()

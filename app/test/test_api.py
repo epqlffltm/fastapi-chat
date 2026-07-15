@@ -1,4 +1,4 @@
-#app/test/tast_api.py
+# app/test/tast_api.py
 
 """이번 리뷰에서 찾은 버그들의 회귀 테스트.
 
@@ -6,24 +6,28 @@
 프로덕션까지 갔다는 게 이 파일의 존재 이유다.
 """
 
-import httpx
-from app import ollama_client
-from conftest import OLLAMA, ndjson_events
 import ast
-from pathlib import Path
 import inspect
+import json
+from pathlib import Path
+
+import httpx
+from conftest import OLLAMA, ndjson_events
+
+from app import ollama_client
 from app.routers import chat
 from app.routers.chat import trim_history
-import json
 
 # ══════════════════════════════════════════════════════════════
 # /models — 실패는 상태 코드로 말해야 한다
 # ══════════════════════════════════════════════════════════════
 
+
 def test_models_ok(client, ollama):
     r = client.get("/models")
     assert r.status_code == 200
     assert r.json()["models"] == ["qwen3:8b"]
+
 
 def test_models_returns_503_when_ollama_down(client, ollama):
     """[회귀] 이전엔 200 + {"error": "..."} 를 반환했다.
@@ -35,6 +39,7 @@ def test_models_returns_503_when_ollama_down(client, ollama):
     r = client.get("/models")
     assert r.status_code == 503
     assert "ollama serve" in r.json()["detail"]
+
 
 def test_models_503_on_timeout_with_nonempty_detail(client, ollama):
     """[회귀] str(httpx.ReadTimeout()) 은 빈 문자열이다.
@@ -53,9 +58,11 @@ def test_models_503_on_timeout_with_nonempty_detail(client, ollama):
     assert r.status_code == 503
     assert r.json()["detail"].strip()  # 빈 문자열이면 실패
 
+
 # ══════════════════════════════════════════════════════════════
 # 토큰 추정기 — tiktoken 없이, prompt_eval_count 로 자가보정
 # ══════════════════════════════════════════════════════════════
+
 
 def test_no_tiktoken_anywhere():
     """[회귀] tiktoken 은 런타임에 openaipublic.blob.core.windows.net 에서
@@ -80,6 +87,7 @@ def test_no_tiktoken_anywhere():
 
     assert offenders == []
 
+
 def test_estimator_calibrates_from_prompt_eval_count(client, session, ollama):
     """추정기가 Ollama의 실측값으로 보정된다."""
     before = ollama_client.current_ratio("qwen3:8b")
@@ -90,6 +98,7 @@ def test_estimator_calibrates_from_prompt_eval_count(client, session, ollama):
     after = ollama_client.current_ratio("qwen3:8b")
     assert after != before  # prompt_eval_count=137 을 보고 학습했다
     assert 0 < after < 10
+
 
 def test_trim_history_never_starts_with_assistant():
     """[회귀] 토큰 수만 보고 자르면 user 질문이 잘려나가고 assistant 답변만 남는다.
@@ -114,6 +123,7 @@ def test_trim_history_never_starts_with_assistant():
     assert kept, "예산 안에 들어가는 메시지가 있는데 전부 잘렸다"
     assert kept[0].role == "user", "히스토리가 고아 assistant 답변으로 시작한다"
 
+
 def test_system_prompt_counted_in_budget():
     """[회귀] RESERVED_TOKENS 가 '응답 + 시스템 프롬프트' 몫이라고 해놓고
     정작 SYSTEM_PROMPT 토큰은 아무 데서도 세지 않았다.
@@ -123,9 +133,11 @@ def test_system_prompt_counted_in_budget():
     source = inspect.getsource(chat.chat)
     assert "estimate_tokens(SYSTEM_PROMPT" in source
 
+
 # ══════════════════════════════════════════════════════════════
 # /chat — 스트리밍, 저장, 메트릭
 # ══════════════════════════════════════════════════════════════
+
 
 def test_chat_streams_and_saves(client, session, ollama):
     r = client.post("/chat", json={"session_id": session, "message": "안녕하세요"})
@@ -139,6 +151,7 @@ def test_chat_streams_and_saves(client, session, ollama):
     messages = client.get(f"/sessions/{session}/messages").json()
     assert [m["role"] for m in messages] == ["user", "assistant"]
     assert messages[1]["content"] == "안녕하세요"
+
 
 def test_chat_emits_stats_event(client, session, ollama):
     """[신규] done 청크의 지표를 버리지 않고 stats 이벤트로 내보낸다."""
@@ -163,18 +176,21 @@ def test_chat_sends_explicit_num_ctx(client, session, ollama):
     client.post("/chat", json={"session_id": session, "message": "안녕"})
 
     sent = ollama.calls.last.request
-    
+
     body = json.loads(sent.content)
     # /api/show 가 40960 을 주고, CONTEXT_LIMIT 이 32768 → min = 32768
     assert body["options"]["num_ctx"] == 32768
+
 
 def test_chat_404_on_missing_session(client, ollama):
     r = client.post("/chat", json={"session_id": "nope", "message": "안녕"})
     assert r.status_code == 404
 
+
 def test_chat_400_without_message(client, session, ollama):
     r = client.post("/chat", json={"session_id": session})
     assert r.status_code == 400
+
 
 def test_context_length_falls_back_when_show_fails(client, session, ollama):
     """/api/show 가 죽어도 채팅은 되어야 한다. 컨텍스트를 못 알아내는 건
@@ -184,9 +200,11 @@ def test_context_length_falls_back_when_show_fails(client, session, ollama):
     r = client.post("/chat", json={"session_id": session, "message": "안녕"})
     assert r.status_code == 200
 
+
 # ══════════════════════════════════════════════════════════════
 # 세션 / 검색
 # ══════════════════════════════════════════════════════════════
+
 
 def test_search_by_title_and_content(client, ollama):
     a = client.post("/sessions", json={"model": "qwen3:8b"}).json()["id"]
@@ -198,6 +216,7 @@ def test_search_by_title_and_content(client, ollama):
     assert [s["id"] for s in hits] == [a]
 
     assert client.get("/sessions/search", params={"q": "없는말"}).json() == []
+
 
 def test_delete_messages_from(client, session, ollama):
     client.post("/chat", json={"session_id": session, "message": "첫번째"})

@@ -1,4 +1,4 @@
-#app/test/conftest.py
+# app/test/conftest.py
 
 """테스트 픽스처.
 
@@ -30,7 +30,7 @@ OLLAMA = "http://localhost:11434"
 def _reset_client_caches():
     """모듈 전역 캐시(추정 비율, 컨텍스트 길이)를 테스트마다 초기화."""
     ollama_client._context_cache.clear()  # /api/show 결과 (모델→컨텍스트 길이)
-    ollama_client._ratio.clear()          # 추정기 보정 계수
+    ollama_client._ratio.clear()  # 추정기 보정 계수
     yield
 
 

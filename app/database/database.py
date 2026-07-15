@@ -9,8 +9,10 @@ DB 연결
 """
 
 from collections.abc import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+
 from app.config import DATABASE_URL
 
 # SQLite URL을 비동기 드라이버 URL로 변환
@@ -35,15 +37,18 @@ SessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
+
 class Base(DeclarativeBase):
     pass
+
 
 async def init_db() -> None:
     """존재하지 않는 DB 테이블을 생성합니다."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+
+async def get_db() -> AsyncGenerator[AsyncSession]:
     """요청별 비동기 DB 세션을 제공합니다."""
     async with SessionLocal() as session:
         yield session

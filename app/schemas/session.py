@@ -1,23 +1,26 @@
-#app/schemas/session.py
+# app/schemas/session.py
 
-'''
+"""
 2026-07-13
 스키마 분리
 
 2026-07-15
 class Config 수정
-'''
+"""
 
 from datetime import datetime
-from pydantic import BaseModel
-from pydantic import ConfigDict
+
+from pydantic import BaseModel, ConfigDict
+
 
 class SessionCreate(BaseModel):
     model: str
 
+
 class SessionUpdate(BaseModel):
     title: str | None = None
     model: str | None = None
+
 
 class SessionOut(BaseModel):
     id: str
@@ -27,6 +30,7 @@ class SessionOut(BaseModel):
 
     class SessionOut(BaseModel):
         model_config = ConfigDict(from_attributes=True)
+
 
 class MessageOut(BaseModel):
     id: int

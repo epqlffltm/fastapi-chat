@@ -1,9 +1,9 @@
-#app/schemas/chat.py
+# app/schemas/chat.py
 
-'''
+"""
 2026-07-13
 스키마 분리
-'''
+"""
 
 from pydantic import BaseModel
 

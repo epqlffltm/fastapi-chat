@@ -1,6 +1,6 @@
 # app/main.py
 
-'''
+"""
 2026-07-09
 챗봇 서버 - 작성
 
@@ -24,14 +24,17 @@
 
 2026-07-14
 DB 초기화 실행 버그 수정
-'''
+"""
 
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
 from app.config import BASE_DIR
-from app.database.database import init_db,engine
+from app.database.database import engine, init_db
 from app.routers import chat, pages, sessions
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,6 +42,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     yield
     await engine.dispose()
+
 
 app = FastAPI(lifespan=lifespan)
 

@@ -4,17 +4,17 @@ Ollama API를 스트리밍으로 호출해 다운로드 진행률을 직접 출�
 """
 
 import json
+
 import httpx
 
 OLLAMA_PULL_URL = "http://localhost:11434/api/pull"
 
 MODELS = [
-    "qwen3.5:4b",           # 4B, CPU 반응성 좋음
-    "qwen3:8b",              # 8B, 품질 상위권
-    "exaone3.5:7.8b",       # LG, 한국어 특화
-    "llama3.1:8b",           # 8B, 범용
-    "phi4-mini"              # 3.8B, 추론 특화
-
+    "qwen3.5:4b",  # 4B, CPU 반응성 좋음
+    "qwen3:8b",  # 8B, 품질 상위권
+    "exaone3.5:7.8b",  # LG, 한국어 특화
+    "llama3.1:8b",  # 8B, 범용
+    "phi4-mini",  # 3.8B, 추론 특화
 ]
 
 
@@ -31,8 +31,7 @@ def print_progress(status: str, completed: int, total: int):
     filled = int(bar_width * percent / 100)
     bar = "█" * filled + "-" * (bar_width - filled)
     print(
-        f"\r{status:<20} [{bar}] {percent:5.1f}% "
-        f"({format_bytes(completed)}/{format_bytes(total)})",
+        f"\r{status:<20} [{bar}] {percent:5.1f}% ({format_bytes(completed)}/{format_bytes(total)})",
         end="",
         flush=True,
     )

@@ -1,6 +1,6 @@
-#app/ollama_client.py
+# app/ollama_client.py
 
-'''
+"""
 2026-07-11
 Ollama API 통신 (스트리밍, 모델 조회)
 
@@ -8,7 +8,7 @@ Ollama API 통신 (스트리밍, 모델 조회)
 tiktoken 제거 → Ollama가 done 청크로 주는 실제 토큰 수 사용 + stats 이벤트 방출
 연결 실패를 OllamaUnavailable 예외로 명시화 (라우터가 503으로 변환)
 /api/show 로 모델의 실제 컨텍스트 길이 조회
-'''
+"""
 
 import json
 import time
@@ -91,7 +91,8 @@ def _raw_estimate(text: str) -> int:
     if not text:
         return 0
     cjk = sum(
-        1 for ch in text
+        1
+        for ch in text
         if "\u3000" <= ch <= "\u9fff" or "\uac00" <= ch <= "\ud7a3" or "\uf900" <= ch <= "\ufaff"
     )
     other = len(text) - cjk
@@ -100,7 +101,7 @@ def _raw_estimate(text: str) -> int:
 
 # 모델별 보정 계수. 실제 토큰 수 / 순수 근사값. 1.0 에서 시작해 실측으로 수렴한다.
 _ratio: dict[str, float] = {}
-_RATIO_ALPHA = 0.3   # EMA 가중치. 클수록 최신 관측에 빠르게 반응.
+_RATIO_ALPHA = 0.3  # EMA 가중치. 클수록 최신 관측에 빠르게 반응.
 
 
 def current_ratio(model: str) -> float:
@@ -201,7 +202,7 @@ async def ollama_stream(model: str, messages: list[dict], think: bool, num_ctx: 
                     if thinking_piece:
                         yield ndjson("thinking", text=thinking_piece)
                     if content_piece:
-                        if ttft_seconds is None:   # 첫 실제 토큰 = TTFT
+                        if ttft_seconds is None:  # 첫 실제 토큰 = TTFT
                             ttft_seconds = time.perf_counter() - start
                         yield ndjson("content", text=content_piece)
 

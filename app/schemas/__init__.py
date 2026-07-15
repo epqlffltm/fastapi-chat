@@ -1,7 +1,7 @@
-#app/schemas/__init__.py
+# app/schemas/__init__.py
 
 from app.schemas.chat import ChatRequest
-from app.schemas.session import SessionCreate, SessionUpdate, SessionOut, MessageOut
+from app.schemas.session import MessageOut, SessionCreate, SessionOut, SessionUpdate
 
 __all__ = [
     "ChatRequest",

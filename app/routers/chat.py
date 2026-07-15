@@ -1,6 +1,6 @@
-#app/routers/chat.py
+# app/routers/chat.py
 
-'''
+"""
 2026-07-11
 GET /models, POST /chat
 챗봇 서버 - Pydantic 스키마 정의(app/schemas.py)로 이동
@@ -17,7 +17,7 @@ Ollama가 꺼져있을 때 앱이 죽는 버그 수정
 /models 가 실패를 200+error 로 반환하던 것을 503 으로 교체.
 tiktoken 제거. 컨텍스트 예산을 Ollama에서 조회한 실제 값으로 계산.
 히스토리를 대화 쌍 단위로 자르도록 수정.
-'''
+"""
 
 import json
 from datetime import UTC, datetime
