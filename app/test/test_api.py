@@ -1,4 +1,4 @@
-# app/test/tast_api.py
+# app/test/test_api.py
 
 """이번 리뷰에서 찾은 버그들의 회귀 테스트.
 
@@ -12,11 +12,12 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 from conftest import OLLAMA, ndjson_events
 
 from app import ollama_client
 from app.routers import chat
-from app.routers.chat import trim_history
+from app.routers.chat import ContextBudgetExceeded, trim_history
 
 # ══════════════════════════════════════════════════════════════
 # /models — 실패는 상태 코드로 말해야 한다
@@ -124,6 +125,34 @@ def test_trim_history_never_starts_with_assistant():
     assert kept[0].role == "user", "히스토리가 고아 assistant 답변으로 시작한다"
 
 
+def test_trim_history_always_keeps_latest_message():
+    """[회귀] 최신 질문 하나가 예산을 넘으면 결과가 [] 가 되어
+    모델이 시스템 프롬프트만 받았다. 이제는 조용히 비우지 않고 예외를 던진다."""
+
+    class Msg:
+        def __init__(self, role, content):
+            self.role, self.content = role, content
+
+    history = [Msg("user", "가" * 10), Msg("assistant", "나" * 10), Msg("user", "다" * 50)]
+
+    # 최신 질문은 들어가고, 그 앞은 예산 밖 → 최신 질문만 남는다
+    kept = trim_history(history, "qwen3:8b", budget=55)
+    assert [m.content for m in kept] == ["다" * 50]
+
+    with pytest.raises(ContextBudgetExceeded):
+        trim_history(history, "qwen3:8b", budget=30)
+
+
+def test_chat_413_when_message_exceeds_budget(client, session, ollama):
+    """[회귀] 너무 긴 질문은 스트리밍 전에 413 으로 거절하고, DB 에도 남기지 않는다."""
+    r = client.post("/chat", json={"session_id": session, "message": "가" * 40000})
+    assert r.status_code == 413
+    assert "너무 깁니다" in r.json()["detail"]
+
+    assert client.get(f"/sessions/{session}/messages").json() == []
+    assert all("/api/chat" not in str(c.request.url) for c in ollama.calls)
+
+
 def test_system_prompt_counted_in_budget():
     """[회귀] RESERVED_TOKENS 가 '응답 + 시스템 프롬프트' 몫이라고 해놓고
     정작 SYSTEM_PROMPT 토큰은 아무 데서도 세지 않았다.
@@ -192,6 +221,41 @@ def test_chat_400_without_message(client, session, ollama):
     assert r.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "exc",
+    [httpx.ConnectTimeout("t"), httpx.RemoteProtocolError("peer closed")],
+    ids=["connect_timeout", "remote_protocol_error"],
+)
+def test_chat_stream_errors_emit_error_event(client, session, ollama, exc):
+    """[회귀] ReadTimeout/ConnectError 외의 예외는 error 이벤트 없이
+    200 + 빈 본문으로 끝났다. 프론트는 실패인지 알 수 없었다."""
+    ollama.post(f"{OLLAMA}/api/chat").mock(side_effect=exc)
+
+    r = client.post("/chat", json={"session_id": session, "message": "안녕"})
+    assert r.status_code == 200
+
+    errors = [e for e in ndjson_events(r) if e["type"] == "error"]
+    assert len(errors) == 1
+    assert errors[0]["text"].strip()
+
+
+def test_chat_does_not_save_partial_reply_on_error(client, session, ollama):
+    """[회귀] 에러로 끊긴 부분 응답이 완성된 assistant 메시지처럼 저장됐다."""
+    lines = [json.dumps({"message": {"content": ch}}) for ch in "안녕하"]
+    lines.append(json.dumps({"error": "model runner crashed"}))
+    ollama.post(f"{OLLAMA}/api/chat").mock(
+        return_value=httpx.Response(200, content=("\n".join(lines) + "\n").encode())
+    )
+
+    r = client.post("/chat", json={"session_id": session, "message": "안녕"})
+    events = ndjson_events(r)
+    assert "".join(e["text"] for e in events if e["type"] == "content") == "안녕하"
+    assert events[-1]["type"] == "error"
+
+    messages = client.get(f"/sessions/{session}/messages").json()
+    assert [m["role"] for m in messages] == ["user"]  # 잘린 답변은 저장 안 됨
+
+
 def test_context_length_falls_back_when_show_fails(client, session, ollama):
     """/api/show 가 죽어도 채팅은 되어야 한다. 컨텍스트를 못 알아내는 건
     채팅을 막을 이유가 아니다."""
@@ -216,6 +280,18 @@ def test_search_by_title_and_content(client, ollama):
     assert [s["id"] for s in hits] == [a]
 
     assert client.get("/sessions/search", params={"q": "없는말"}).json() == []
+
+
+def test_search_escapes_like_wildcards(client, ollama):
+    """[회귀] q 를 그대로 LIKE 패턴에 넣어서 q="%" 가 모든 세션에 걸렸다."""
+    a = client.post("/sessions", json={"model": "qwen3:8b"}).json()["id"]
+    b = client.post("/sessions", json={"model": "qwen3:8b"}).json()["id"]
+    client.patch(f"/sessions/{a}", json={"title": "할인율 50% 계산"})
+    client.patch(f"/sessions/{b}", json={"title": "snake_case 질문"})
+
+    assert [s["id"] for s in client.get("/sessions/search", params={"q": "%"}).json()] == [a]
+    assert [s["id"] for s in client.get("/sessions/search", params={"q": "_"}).json()] == [b]
+    assert client.get("/sessions/search", params={"q": "\\"}).json() == []
 
 
 def test_delete_messages_from(client, session, ollama):

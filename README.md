@@ -165,13 +165,13 @@ Copy-Item prompts\system_prompt.example.txt prompts\system_prompt.txt
 | `MAX_HISTORY_MESSAGES` | 히스토리로 보낼 최대 메시지 개수 (토큰 예산과 별개인 안전장치) | `40` |
 | `DATABASE_URL` | DB 연결 문자열 (미설정 시 `data/chat.db` 자동 사용) | - |
 
-> 히스토리 길이는 개수와 토큰 예산 **둘 다**로 제한됩니다. 실제 컨텍스트 창 크기는 모델마다 다르므로 `/api/show`로 조회하며, 시스템 프롬프트 토큰은 예산에서 별도로 차감합니다. 자세한 근거는 [DECISIONS.md](DECISIONS.md) 참고.
+> 히스토리 길이는 개수와 토큰 예산 **둘 다**로 제한됩니다. 실제 컨텍스트 창 크기는 모델마다 다르므로 `/api/show`로 조회하며, 시스템 프롬프트 토큰은 예산에서 별도로 차감합니다. 자세한 근거는 [decisions.md](decisions.md) 참고.
 
 ## 설계 결정과 의도적 한계
 
 주요 기술 선택의 **근거**(tiktoken 대신 자기보정 추정기를 쓴 이유, 스트리밍 중 DB 커넥션 수명, 실패를 상태 코드로 표현하는 이유, Docker에서 Ollama를 호스트에 둔 이유 등)와, 이 프로젝트가 **범위에 맞춰 일부러 하지 않은 것**(인증, 다중 사용자, 마이그레이션 등)은 별도 문서에 정리했습니다.
 
-→ **[DECISIONS.md](DECISIONS.md)**
+→ **[decisions.md](decisions.md)**
 
 ## 테스트
 
@@ -183,7 +183,7 @@ Ollama 서버나 GPU 없이 실행됩니다 — respx로 Ollama 응답을 목킹
 
 ## 알려진 제약
 
-단일 사용자·로컬 환경을 전제로 한 **의도적** 결정입니다(모르고 빠뜨린 것이 아니라, 확장 시 어디를 손대야 하는지까지 [DECISIONS.md](DECISIONS.md)에 정리).
+단일 사용자·로컬 환경을 전제로 한 **의도적** 결정입니다(모르고 빠뜨린 것이 아니라, 확장 시 어디를 손대야 하는지까지 [decisions.md](decisions.md)에 정리).
 
 - 인증·권한 없음 — 서버는 `127.0.0.1`에만 바인딩, 데이터는 로컬 SQLite.
 - 동시 쓰기 미대응 — 단일 사용자·`NUM_PARALLEL=1`에서 요청이 직렬이므로 불필요.

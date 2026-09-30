@@ -17,6 +17,10 @@ Ollama가 꺼져있을 때 앱이 죽는 버그 수정
 /models 가 실패를 200+error 로 반환하던 것을 503 으로 교체.
 tiktoken 제거. 컨텍스트 예산을 Ollama에서 조회한 실제 값으로 계산.
 히스토리를 대화 쌍 단위로 자르도록 수정.
+
+2026-09-30
+최신 메시지는 항상 포함. 그 하나만으로 예산을 넘으면 413 (저장·스트리밍 전에 거절).
+에러로 끊긴 부분 응답은 저장하지 않는다 (done 까지 받은 경우만 저장).
 """
 
 import json
@@ -49,19 +53,29 @@ from app.schemas import ChatRequest
 router = APIRouter()
 
 
+class ContextBudgetExceeded(ValueError):
+    """최신 메시지 하나만으로 컨텍스트 예산을 넘는다. 라우터가 413 으로 바꾼다."""
+
+
 def trim_history(messages: list[ChatMessage], model: str, budget: int) -> list[ChatMessage]:
     """최신 메시지부터 예산까지 채우되, 대화 쌍이 깨지지 않게 한다.
 
     토큰 수만 보고 자르면 user 질문이 잘려나가고 assistant 답변만 남아
     히스토리가 assistant 로 시작하는 일이 생긴다. 모델 입장에서는
     "아무도 안 물어봤는데 내가 답한" 대화가 되므로 앞의 고아 답변은 떼어낸다.
+
+    최신 메시지(지금 보낸 질문)는 반드시 포함한다. 이전엔 그것마저 예산을 넘으면
+    빈 리스트가 되어 모델이 시스템 프롬프트만 받고 엉뚱한 답을 했다.
+    그 하나로도 넘치면 조용히 자르지 않고 ContextBudgetExceeded 를 던진다.
     """
     kept: list[ChatMessage] = []
     used = 0
 
-    for message in reversed(messages):
+    for i, message in enumerate(reversed(messages)):
         cost = estimate_tokens(message.content or "", model)
         if used + cost > budget:
+            if i == 0:
+                raise ContextBudgetExceeded
             break
         kept.append(message)
         used += cost
@@ -74,7 +88,7 @@ def trim_history(messages: list[ChatMessage], model: str, budget: int) -> list[C
     return kept
 
 
-@router.get("/models")
+@router.get("/models", status_code=200)
 async def get_models():
     """실패는 상태 코드로 말한다.
 
@@ -90,7 +104,7 @@ async def get_models():
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.post("/chat")
+@router.post("/chat", status_code=200)
 async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db, scope="function")):
     # scope="function": 경로 함수가 끝나면 DB 세션이 반납된다 — 응답이 나가기 전에.
     # 스트리밍은 응답 단계이므로, LLM이 몇 분씩 생성하는 동안 커넥션을 물고 있지 않는다.
@@ -103,14 +117,8 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db, scope="f
     if not model:
         raise HTTPException(status_code=400, detail="모델이 지정되지 않았습니다.")
 
-    if not payload.regenerate:
-        if not payload.message:
-            raise HTTPException(status_code=400, detail="message가 필요합니다.")
-
-        db.add(ChatMessage(session_id=payload.session_id, role="user", content=payload.message))
-        if session.title == "새 대화":
-            session.title = payload.message[:20] + ("…" if len(payload.message) > 20 else "")
-        await db.commit()
+    if not payload.regenerate and not payload.message:
+        raise HTTPException(status_code=400, detail="message가 필요합니다.")
 
     history_result = await db.execute(
         select(ChatMessage)
@@ -120,6 +128,15 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db, scope="f
     )
     history = list(history_result.scalars().all())
     history.reverse()
+
+    # 새 질문은 예산 검사를 통과한 뒤에 저장한다. 413 으로 거절된 메시지가
+    # DB 에 남으면 다음 요청마다 히스토리에 끼어 같은 문제를 반복한다.
+    new_message = None
+    if not payload.regenerate:
+        new_message = ChatMessage(
+            session_id=payload.session_id, role="user", content=payload.message
+        )
+        history = (history + [new_message])[-MAX_HISTORY_MESSAGES:]
 
     # --- 컨텍스트 예산 ---
     # 모델의 진짜 최대 컨텍스트를 /api/show 에서 읽고, VRAM 안전 상한과 min().
@@ -132,7 +149,20 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db, scope="f
     system_cost = estimate_tokens(SYSTEM_PROMPT, model)
     budget = num_ctx - RESERVE_FOR_REPLY - system_cost
 
-    history = trim_history(history, model, max(budget, 0))
+    try:
+        history = trim_history(history, model, max(budget, 0))
+    except ContextBudgetExceeded as exc:
+        # 스트리밍 시작 전이므로 아직 상태 코드를 바꿀 수 있다.
+        raise HTTPException(
+            status_code=413,
+            detail="메시지가 너무 깁니다. 모델의 컨텍스트 한도를 넘어 보낼 수 없습니다.",
+        ) from exc
+
+    if new_message is not None:
+        db.add(new_message)
+        if session.title == "새 대화":
+            session.title = payload.message[:20] + ("…" if len(payload.message) > 20 else "")
+        await db.commit()
 
     ollama_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     ollama_messages += [{"role": m.role, "content": m.content} for m in history]
@@ -147,19 +177,25 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db, scope="f
 
     async def stream_and_save():
         full_text = ""
+        # stats 이벤트는 Ollama 의 done 청크에서만 나온다 = 생성이 끝까지 완료됐다.
+        # 에러로 중간에 끊긴 답변을 완성본처럼 저장하면, 다음 요청의 히스토리에
+        # 잘린 문장이 섞여 들어간다. 완료된 경우만 저장한다.
+        completed = False
 
         async for chunk in ollama_stream(model, ollama_messages, think, num_ctx):
             try:
                 evt = json.loads(chunk)
                 if evt.get("type") == "content":
                     full_text += evt["text"]
-                elif evt.get("type") == "stats" and evt.get("prompt_tokens"):
-                    observe_actual(model, prompt_raw, evt["prompt_tokens"])
+                elif evt.get("type") == "stats":
+                    completed = True
+                    if evt.get("prompt_tokens"):
+                        observe_actual(model, prompt_raw, evt["prompt_tokens"])
             except json.JSONDecodeError:
                 pass
             yield chunk
 
-        if not full_text:
+        if not completed or not full_text:
             return
 
         # 쓸 때만 새 세션을 연다.

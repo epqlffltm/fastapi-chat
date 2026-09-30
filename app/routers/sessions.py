@@ -6,6 +6,9 @@
 
 2026-07-14
 비동기 마이그레이션
+
+2026-09-30
+검색어의 LIKE 와일드카드(% _ \\) 이스케이프
 """
 
 # app/routers/sessions.py
@@ -24,36 +27,43 @@ from app.schemas import MessageOut, SessionCreate, SessionOut, SessionUpdate
 router = APIRouter()
 
 
-@router.get("/sessions", response_model=list[SessionOut])
+@router.get("/sessions", response_model=list[SessionOut], status_code=200)
 async def list_sessions(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ChatSession).order_by(ChatSession.updated_at.desc()))
     return result.scalars().all()
 
 
-@router.get("/sessions/search", response_model=list[SessionOut])
+@router.get("/sessions/search", response_model=list[SessionOut], status_code=200)
 async def search_sessions(q: str, db: AsyncSession = Depends(get_db)):
     query = q.strip()
     if not query:
         result = await db.execute(select(ChatSession).order_by(ChatSession.updated_at.desc()))
         return result.scalars().all()
 
-    pattern = f"%{query}%"
+    # 사용자가 친 % 와 _ 는 LIKE 에서 와일드카드로 해석된다. q="%" 면 전부 걸린다.
+    # 이스케이프 문자(\) 자신을 먼저 바꿔야 뒤에서 넣은 \ 가 두 번 처리되지 않는다.
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
 
     # 메시지 내용 검색
-    msg_stmt = select(ChatMessage.session_id).where(ChatMessage.content.ilike(pattern)).distinct()
+    msg_stmt = (
+        select(ChatMessage.session_id)
+        .where(ChatMessage.content.ilike(pattern, escape="\\"))
+        .distinct()
+    )
     msg_result = await db.execute(msg_stmt)
     matching_ids = msg_result.scalars().all()
 
     stmt = (
         select(ChatSession)
-        .where((ChatSession.title.ilike(pattern)) | (ChatSession.id.in_(matching_ids)))
+        .where((ChatSession.title.ilike(pattern, escape="\\")) | (ChatSession.id.in_(matching_ids)))
         .order_by(ChatSession.updated_at.desc())
     )
     result = await db.execute(stmt)
     return result.scalars().all()
 
 
-@router.post("/sessions", response_model=SessionOut)
+@router.post("/sessions", response_model=SessionOut, status_code=200)
 async def create_session(payload: SessionCreate, db: AsyncSession = Depends(get_db)):
     session = ChatSession(id=str(uuid.uuid4()), title="새 대화", model=payload.model)
     db.add(session)
@@ -62,7 +72,7 @@ async def create_session(payload: SessionCreate, db: AsyncSession = Depends(get_
     return session
 
 
-@router.get("/sessions/{session_id}/messages", response_model=list[MessageOut])
+@router.get("/sessions/{session_id}/messages", response_model=list[MessageOut], status_code=200)
 async def get_messages(session_id: str, db: AsyncSession = Depends(get_db)):
     session = await db.get(ChatSession, session_id)
     if not session:
@@ -74,7 +84,7 @@ async def get_messages(session_id: str, db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
-@router.patch("/sessions/{session_id}", response_model=SessionOut)
+@router.patch("/sessions/{session_id}", response_model=SessionOut, status_code=200)
 async def update_session(
     session_id: str, payload: SessionUpdate, db: AsyncSession = Depends(get_db)
 ):
@@ -93,7 +103,7 @@ async def update_session(
     return session
 
 
-@router.delete("/sessions/{session_id}")
+@router.delete("/sessions/{session_id}", status_code=200)
 async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
     session = await db.get(ChatSession, session_id)
     if not session:
@@ -104,7 +114,7 @@ async def delete_session(session_id: str, db: AsyncSession = Depends(get_db)):
     return {"deleted": True}
 
 
-@router.delete("/sessions/{session_id}/messages")
+@router.delete("/sessions/{session_id}/messages", status_code=200)
 async def clear_messages(session_id: str, db: AsyncSession = Depends(get_db)):
     session = await db.get(ChatSession, session_id)
     if not session:
@@ -116,7 +126,7 @@ async def clear_messages(session_id: str, db: AsyncSession = Depends(get_db)):
     return {"cleared": True}
 
 
-@router.delete("/sessions/{session_id}/messages/from/{message_id}")
+@router.delete("/sessions/{session_id}/messages/from/{message_id}", status_code=200)
 async def delete_messages_from(
     session_id: str, message_id: int, db: AsyncSession = Depends(get_db)
 ):

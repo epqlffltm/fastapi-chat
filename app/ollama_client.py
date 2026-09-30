@@ -8,6 +8,9 @@ Ollama API 통신 (스트리밍, 모델 조회)
 tiktoken 제거 → Ollama가 done 청크로 주는 실제 토큰 수 사용 + stats 이벤트 방출
 연결 실패를 OllamaUnavailable 예외로 명시화 (라우터가 503으로 변환)
 /api/show 로 모델의 실제 컨텍스트 길이 조회
+
+2026-09-30
+스트리밍 예외 처리 보강: ConnectTimeout, RemoteProtocolError 등도 error 이벤트로 알린다.
 """
 
 import json
@@ -210,10 +213,18 @@ async def ollama_stream(model: str, messages: list[dict], think: bool, num_ctx: 
                         yield ndjson("stats", **_compute_stats(data, ttft_seconds))
                         break
 
+    # 여기서 안 잡힌 예외는 200 + 빈(또는 잘린) 본문으로 조용히 끝난다.
+    # 스트리밍은 이미 200 을 보낸 뒤라 상태 코드로 알릴 수 없으므로 반드시 error 이벤트를 흘린다.
     except httpx.ReadTimeout:
         yield ndjson("error", text="응답 생성이 너무 오래 걸려 시간 초과되었습니다.")
+    except httpx.TimeoutException:
+        # ConnectTimeout / WriteTimeout / PoolTimeout — ReadTimeout 의 형제들
+        yield ndjson("error", text="Ollama 서버에 연결하는 중 시간 초과되었습니다.")
     except httpx.ConnectError:
         yield ndjson(
             "error",
             text="Ollama 서버에 연결할 수 없습니다. 서버가 켜져 있는지 확인해주세요.",
         )
+    except httpx.HTTPError as exc:
+        # RemoteProtocolError, ReadError 등 나머지 전부 (Ollama가 도중에 죽은 경우 등)
+        yield ndjson("error", text=f"Ollama 통신 중 오류가 발생했습니다: {type(exc).__name__}")
